@@ -178,14 +178,14 @@ async function claim(id) {
   }
 }
 
-let subscribed = false;
+let subscribed = false, treeUnsubs = [];
 function subscribe() {
   if (subscribed) return;
   subscribed = true;
 
   // Checkbox state only. Small enough to hold the whole history in memory.
   for (const branch of ["meta", "people", "days"]) {
-    onValue(ref(db, branch), (snap) => {
+    treeUnsubs.push(onValue(ref(db, branch), (snap) => {
       S.data = { ...S.data, [branch]: snap.val() || {} };
       if (branch === "people") { peopleLoaded = true; settle(); }
       render();
@@ -193,10 +193,10 @@ function subscribe() {
       if (err?.code === "PERMISSION_DENIED") { S.phase = "denied"; S.me = null; return render(); }
       S.authErr = `Could not read ${branch} (${err.code || err.message}).`;
       render();
-    });
+    }));
   }
 
-  onValue(ref(db, ".info/connected"), (snap) => { S.online = !!snap.val(); paintLink(); });
+  treeUnsubs.push(onValue(ref(db, ".info/connected"), (snap) => { S.online = !!snap.val(); paintLink(); }));
   watchTodayPics();
 }
 
@@ -392,9 +392,10 @@ const screenBoot = (what) =>
 const screenNoConfig = () =>
   `<div class="screen"><div class="screen-in">${MARK}
     <h2 class="disp">Almost there</h2>
-    <p>No Firebase project is attached yet. Open <b>config.js</b>, paste the web config
-      from the Firebase console, add Jon's Google address, then run
-      <b>node tools/build-rules.mjs</b> and publish the generated rules.</p>
+    <p>No Firebase project is attached yet. Paste the web config from the Firebase
+      console into <b>config.js</b>, put both Google addresses in
+      <b>emails.local.json</b>, then run <b>node tools/build-rules.mjs</b> and publish
+      the generated rules.</p>
     <p class="fine">Step by step instructions are in SETUP.md in the repository.</p>
   </div></div>`;
 
@@ -712,10 +713,12 @@ function wire() {
   on("[data-claim]", "click", (e) => claim(e.currentTarget.getAttribute("data-claim")));
 
   on("[data-signout]", "click", () => {
+    // Detach everything, or signing in again stacks duplicate listeners.
     subscribed = false; peopleLoaded = false; picKeys = "";
     S.claimErr = null;
-    picUnsubs.forEach((u) => { try { u(); } catch {} });
-    picUnsubs = []; PICS.clear();
+    [...treeUnsubs, ...picUnsubs].forEach((u) => { try { u(); } catch {} });
+    treeUnsubs = []; picUnsubs = []; PICS.clear();
+    S.data = { meta: {}, people: {}, days: {} };
     signOut(auth).catch(() => {});
   });
 

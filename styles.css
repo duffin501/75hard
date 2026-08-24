@@ -121,6 +121,20 @@ img{max-width:100%; display:block}
 .screen .fine{font-size:12px; color:var(--ink-3); max-width:40ch}
 .screen .err{color:var(--miss); font-size:13.5px; max-width:44ch}
 
+/* the claim screen: one card per column, dimmed once someone owns it */
+.gate-picks{display:grid; grid-template-columns:1fr 1fr; gap:12px; width:100%}
+.pick{border:1px solid var(--rule-2); background:var(--surface); border-radius:4px;
+  padding:26px 12px; display:grid; gap:5px; justify-items:center;
+  transition:transform .12s ease, background .12s ease}
+.pick:hover:not(:disabled){transform:translateY(-2px); background:var(--surface-2)}
+.pick:disabled{opacity:.4; cursor:not-allowed}
+.pick .nm{font-family:Archivo,sans-serif; font-variation-settings:"wdth" 118,"wght" 800;
+  font-size:24px; text-transform:uppercase; letter-spacing:-.02em}
+.pick.mary{border-top:4px solid var(--mary)} .pick.mary .nm{color:var(--mary)}
+.pick.jon{border-top:4px solid var(--jon)} .pick.jon .nm{color:var(--jon)}
+.pick .sub{font-size:11px; color:var(--ink-3); font-family:"DM Mono",monospace;
+  letter-spacing:.1em; text-transform:uppercase}
+
 /* ===================== shared pieces ===================== */
 .hd{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;
   padding-bottom:8px; border-bottom:2px solid var(--ink)}
