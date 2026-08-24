@@ -34,6 +34,9 @@ export const PEOPLE = [
     name: "Mary",
     relation: "Sister",
     tz: "America/New_York",
+    // What the clock says under your name. Falls back to the timezone's own
+    // city if you ever change the timezone from the Setup tab.
+    zoneLabel: "Virginia",
     start: "2026-08-24",
     diet: "150 g protein, track every calorie"
   },
@@ -42,6 +45,7 @@ export const PEOPLE = [
     name: "Jon",
     relation: "Brother",
     tz: "America/Denver",
+    zoneLabel: "Utah",
     start: "2026-08-24",
     diet: "Protein-dense breakfast"
   }

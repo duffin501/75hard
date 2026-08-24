@@ -19,6 +19,7 @@ import {
   pad, addDays, diffDays, utc, isoIn, untilMidnight,
   fmt, pretty, shortDate, longDate, zoneName,
   doneCount as countDone, isComplete as complete, scoreFor,
+  waterCount, waterDone, WATER_UNITS, WATER_OZ, WATER_TOTAL,
   TASK_KEYS, REQUIRED
 } from "./core.js";
 
@@ -116,6 +117,15 @@ function statusOf(sc) {
   if (sc.todayCount === 0) return { c: "bad", t: "Nothing yet" };
   return { c: "warn", t: `${sc.todayCount} of 6` };
 }
+/* The clock says "Virginia", not "New York". If someone changes their
+ * timezone from Setup the label would be a lie, so fall back to the zone's
+ * own city in that case. */
+const seedOf = (id) => PEOPLE.find((p) => p.id === id) || {};
+function placeOf(p) {
+  const seed = seedOf(p.id);
+  return seed.zoneLabel && p.tz === seed.tz ? seed.zoneLabel : zoneName(p.tz);
+}
+
 const hasPhoto = (id, iso) => !!dayRec(id, iso).photo;
 const thumbOf = (id, iso) => PICS.get(`${id}|${iso}|thumb`) || null;
 
@@ -264,9 +274,27 @@ function flashError(e) {
 async function toggleTask(key) {
   if (S.phase !== "ready") return;
   const iso = isoIn(person(S.me).tz);
-  const on = !!dayRec(S.me, iso)[key];
+  const rec = dayRec(S.me, iso);
   const node = ref(db, `days/${S.me}/${iso}/${key}`);
-  try { on ? await remove(node) : await set(node, true); }
+  try {
+    if (key === "water") {
+      // The row's own checkbox fills or empties the whole gallon at once.
+      waterDone(rec) ? await remove(node) : await set(node, WATER_UNITS);
+      return;
+    }
+    rec[key] ? await remove(node) : await set(node, true);
+  } catch (e) { flashError(e); }
+}
+
+/* Tapping the glass you are already on empties it, so the row works both
+ * ways without a second control. */
+async function setWater(n) {
+  if (S.phase !== "ready") return;
+  const iso = isoIn(person(S.me).tz);
+  const cur = waterCount(dayRec(S.me, iso));
+  const next = cur === n ? n - 1 : n;
+  const node = ref(db, `days/${S.me}/${iso}/water`);
+  try { next <= 0 ? await remove(node) : await set(node, next); }
   catch (e) { flashError(e); }
 }
 
@@ -355,7 +383,7 @@ const root = () => document.getElementById("root");
 
 function render() {
   const el = root();
-  const scroll = document.getElementById("view")?.scrollTop ?? 0;
+  const scroll = window.scrollY;
   const focusId = document.activeElement?.id || null;
   const caret = document.activeElement?.selectionStart ?? null;
 
@@ -370,8 +398,7 @@ function render() {
 
   wire();
 
-  const view = document.getElementById("view");
-  if (view) view.scrollTop = scroll;
+  if (scroll) window.scrollTo(0, scroll);
   if (focusId) {
     const again = document.getElementById(focusId);
     if (again) {
@@ -445,7 +472,7 @@ function appHTML() {
     : S.tab === "ledger" ? viewLedger()
     :                      viewSetup();
 
-  return barHTML(me) + clocksHTML() +
+  return `<div class="top">${barHTML(me)}${clocksHTML()}</div>` +
     `<main class="view" id="view"><div class="pad">${body}</div></main>` +
     navHTML(me) +
     (S.lightbox
@@ -464,7 +491,7 @@ const barHTML = (me) => `<header class="bar">
 
 const clocksHTML = () => `<div class="clocks">` + everyone().map((p) => `
     <div class="ck" id="ck-${p.id}" style="${accent(p.id)}">
-      <div class="nm">${esc(p.name)}<span class="zone">${esc(zoneName(p.tz))}</span></div>
+      <div class="nm">${esc(p.name)}<span class="zone">${esc(placeOf(p))}</span></div>
       <div class="t" id="t-${p.id}">--:--:--</div>
       <div class="st" id="s-${p.id}">&nbsp;</div>
     </div>`).join("") + `</div>`;
@@ -487,12 +514,16 @@ function viewToday(p) {
   const thumb = thumbOf(p.id, iso);
   const busy = !!S.upload;
 
-  const rows = TASKS.map((t) => `
+  const glasses = waterCount(r);
+  const rows = TASKS.map((t) => {
+    if (t.k === "water") return waterRow(glasses);
+    return `
     <button class="task${r[t.k] ? " on" : ""}" data-task="${t.k}">
       <span class="box">${CHECK}</span>
       <span class="lbl"><b>${t.label}</b><small>${t.diet ? esc(p.diet) : t.sub}</small></span>
       ${t.tag ? `<span class="tag out">${t.tag}</span>` : "<span></span>"}
-    </button>`).join("");
+    </button>`;
+  }).join("");
 
   const slot = thumb
     ? `<img class="shot" src="${esc(thumb)}" alt="Your progress photo for today" data-zoom="${p.id}|${iso}">`
@@ -528,12 +559,35 @@ function viewToday(p) {
     ${S.authErr ? `<div class="banner warn">${esc(S.authErr)}</div>` : ""}`;
 }
 
+function waterRow(glasses) {
+  const full = glasses >= WATER_UNITS;
+  const pips = Array.from({ length: WATER_UNITS }, (_, i) => {
+    const on = i < glasses;
+    return `<button class="glass${on ? " on" : ""}" data-water="${i + 1}"
+      aria-label="${(i + 1) * WATER_OZ} ounces"
+      aria-pressed="${on}">${on ? CHECK : ""}</button>`;
+  }).join("");
+
+  return `
+    <button class="task${full ? " on" : ""}" data-task="water">
+      <span class="box">${CHECK}</span>
+      <span class="lbl"><b>One gallon of water</b>
+        <small>${glasses * WATER_OZ} of ${WATER_TOTAL} oz &middot; ${WATER_OZ} oz a glass</small></span>
+      <span class="tag">${glasses}/${WATER_UNITS}</span>
+    </button>
+    <div class="watertray">
+      <div class="glasses">${pips}</div>
+      <div class="waterbar"><i style="width:${Math.round(glasses / WATER_UNITS * 100)}%"></i></div>
+    </div>`;
+}
+
 /* ---------- us ---------- */
 function rigHTML(p) {
   const sc = score(p.id);
   const st = statusOf(sc);
   const r = dayRec(p.id, sc.today);
-  const dots = [...KEYS, "photo"].map((k) => `<span class="${r[k] ? "on" : ""}"></span>`).join("");
+  const dots = [...KEYS, "photo"].map((k) =>
+    `<span class="${(k === "water" ? waterDone(r) : !!r[k]) ? "on" : ""}"></span>`).join("");
   return `<div class="rig" data-pid="${p.id}" style="${accent(p.id)}">
     <div class="rig-head"><span class="rig-name">${esc(p.name)}</span>
       <span class="pill ${st.c}">${st.t}</span></div>
@@ -564,7 +618,14 @@ function viewUs(me) {
   const sc = score(them.id);
   const r = dayRec(them.id, sc.today);
   const thumb = thumbOf(them.id, sc.today);
-  const items = TASKS.map((t) => `<li class="${r[t.k] ? "on" : ""}"><span class="m">${CHECK}</span>${t.label}</li>`).join("") +
+  const items = TASKS.map((t) => {
+    if (t.k === "water") {
+      const g = waterCount(r);
+      return `<li class="${waterDone(r) ? "on" : ""}"><span class="m">${CHECK}</span>${t.label}
+        ${g && !waterDone(r) ? `<span class="mini">${g}/${WATER_UNITS}</span>` : ""}</li>`;
+    }
+    return `<li class="${r[t.k] ? "on" : ""}"><span class="m">${CHECK}</span>${t.label}</li>`;
+  }).join("") +
     `<li class="${r.photo ? "on" : ""}"><span class="m">${CHECK}</span>Progress photo</li>`;
   const shot = thumb
     ? `<img class="shot" src="${esc(thumb)}" alt="${esc(them.name)} progress photo" data-zoom="${them.id}|${sc.today}">`
@@ -572,7 +633,7 @@ function viewUs(me) {
 
   return duel + '<div class="gap"></div>' +
     `<div class="hd" style="${accent(them.id)}"><h2>${esc(them.name)} right now</h2>
-      <span class="rt">${pretty(sc.today)} in ${esc(zoneName(them.tz))} &nbsp;·&nbsp; ${sc.todayCount}/6</span></div>
+      <span class="rt">${pretty(sc.today)} in ${esc(placeOf(them))} &nbsp;·&nbsp; ${sc.todayCount}/6</span></div>
      <div class="mirror" style="${accent(them.id)}">${shot}<ul>${items}</ul></div>`;
 }
 
@@ -726,8 +787,14 @@ function wire() {
     S.tab = e.currentTarget.getAttribute("data-tab");
     try { sessionStorage.setItem("h75.tab", S.tab); } catch {}
     render();
-    const v = document.getElementById("view");
-    if (v) v.scrollTop = 0;
+    window.scrollTo(0, 0);
+  });
+
+  on("[data-water]", "click", (e) => {
+    const b = e.currentTarget;
+    b.classList.add("pop");
+    setTimeout(() => b.classList.remove("pop"), 260);
+    setWater(+b.getAttribute("data-water"));
   });
 
   on("[data-task]", "click", (e) => {

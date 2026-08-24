@@ -33,12 +33,12 @@
 }
 
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%; height:100%}
+html{-webkit-text-size-adjust:100%}
 body{
-  margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+  margin:0; background:var(--bg); color:var(--ink);
   font-family:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   font-size:16px; line-height:1.45; letter-spacing:-.005em;
-  -webkit-font-smoothing:antialiased; overscroll-behavior:none;
+  -webkit-font-smoothing:antialiased; overscroll-behavior-y:contain;
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
 button,.task,.pick,.day{-webkit-tap-highlight-color:transparent; touch-action:manipulation}
@@ -53,10 +53,13 @@ img{max-width:100%; display:block}
 .disp{font-family:Archivo,"Arial Narrow",sans-serif; text-transform:uppercase; letter-spacing:-.02em}
 
 /* ===================== app shell ===================== */
-#app{height:100dvh; display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; position:relative}
-#app::before{content:""; position:absolute; inset:0; pointer-events:none; z-index:0; opacity:var(--grain);
+#app{min-height:100dvh; display:flex; flex-direction:column; position:relative}
+#app::before{content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:var(--grain);
   background-image:radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0); background-size:4px 4px}
-.bar,.clocks,.view,.nav{position:relative; z-index:1}
+.top,.view,.nav{position:relative; z-index:1}
+
+/* Header and both clocks ride along at the top as one sticky block. */
+.top{position:sticky; top:0; z-index:30; background:var(--surface)}
 
 .bar{display:flex; align-items:center; justify-content:space-between; gap:12px;
   padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
@@ -90,10 +93,12 @@ img{max-width:100%; display:block}
 .ck.urgent .t{animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 
-.view{overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch}
-.pad{padding:18px 16px 30px; max-width:900px; margin:0 auto}
+/* Bottom padding clears the fixed nav so nothing hides behind it. */
+.view{flex:1 0 auto; padding-bottom:calc(66px + env(safe-area-inset-bottom))}
+.pad{padding:18px 16px 20px; max-width:900px; margin:0 auto}
 
-.nav{display:grid; grid-template-columns:repeat(4,1fr); background:var(--surface);
+.nav{position:fixed; left:0; right:0; bottom:0; z-index:30;
+  display:grid; grid-template-columns:repeat(4,1fr); background:var(--surface);
   border-top:1px solid var(--rule); padding-bottom:env(safe-area-inset-bottom)}
 .nav button{display:grid; justify-items:center; gap:4px; padding:9px 4px 10px; color:var(--ink-3);
   position:relative; transition:color .14s ease}
@@ -108,8 +113,7 @@ img{max-width:100%; display:block}
 
 /* ===================== full-screen states ===================== */
 .screen{
-  height:100dvh; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
-  display:grid; place-items:center; place-items:safe center;
+  min-height:100dvh; display:grid; place-items:center; place-items:safe center;
   padding:max(32px,env(safe-area-inset-top)) 20px max(32px,env(safe-area-inset-bottom));
   text-align:center; position:relative;
 }
@@ -173,6 +177,23 @@ img{max-width:100%; display:block}
 .task .tag{font-family:"DM Mono",monospace; font-size:9px; letter-spacing:.12em; text-transform:uppercase;
   padding:3px 6px; border-radius:2px; border:1px solid var(--rule-2); color:var(--ink-3); white-space:nowrap}
 .task .tag.out{color:var(--jon); border-color:var(--jon)}
+
+/* Water: eight glasses of 16 oz, and a bar that closes at the gallon. */
+.watertray{background:var(--surface); border-bottom:1px solid var(--rule); padding:0 15px 13px}
+.glasses{display:grid; grid-template-columns:repeat(8,1fr); gap:5px; margin-bottom:11px}
+.glass{
+  height:44px; border:2px solid var(--rule-2); border-radius:5px; background:var(--bg);
+  display:grid; place-items:center; padding:0;
+  transition:background .16s cubic-bezier(.2,.8,.3,1), border-color .16s ease, transform .16s ease;
+}
+.glass svg{width:13px; height:13px; stroke:var(--surface); stroke-width:3.8; fill:none;
+  stroke-linecap:round; stroke-linejoin:round}
+.glass.on{background:var(--accent); border-color:var(--accent)}
+.glass.pop{transform:scale(1.14)}
+.waterbar{height:7px; background:var(--sunk); border-radius:999px; overflow:hidden}
+.waterbar i{display:block; height:100%; width:0; background:var(--accent); border-radius:999px;
+  transition:width .32s cubic-bezier(.2,.7,.3,1)}
+.task .tag{font-variant-numeric:tabular-nums}
 
 .photorow{display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center;
   padding:14px 15px; min-height:68px; border:1px solid var(--rule); border-top:none; background:var(--surface)}
@@ -253,6 +274,8 @@ img{max-width:100%; display:block}
 .mirror li .m svg{width:11px; height:11px; stroke:var(--surface); stroke-width:3.6; fill:none;
   stroke-linecap:round; stroke-linejoin:round; opacity:0}
 .mirror li.on .m svg{opacity:1}
+.mirror li .mini{font-family:"DM Mono",monospace; font-size:11px; color:var(--accent);
+  font-variant-numeric:tabular-nums; margin-left:2px}
 
 /* ===================== ledger ===================== */
 .ldg{margin-bottom:30px}

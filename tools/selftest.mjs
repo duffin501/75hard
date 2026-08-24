@@ -3,7 +3,10 @@
  * The finish-date maths is the part nobody would notice going wrong, so it
  * gets the most attention here. */
 
-import { scoreFor, isoIn, addDays, diffDays } from "../core.js";
+import {
+  scoreFor, isoIn, addDays, diffDays,
+  waterCount, waterDone, doneCount, isComplete, WATER_UNITS
+} from "../core.js";
 
 let pass = 0, fail = 0;
 const eq = (got, want, what) => {
@@ -13,7 +16,7 @@ const eq = (got, want, what) => {
 };
 const group = (name) => console.log(`\n${name}`);
 
-const FULL = { w1: 1, w2: 1, water: 1, read: 1, diet: 1, photo: true };
+const FULL = { w1: 1, w2: 1, water: WATER_UNITS, read: 1, diet: 1, photo: true };
 const PARTIAL = { w1: 1, w2: 1, read: 1, diet: 1, photo: true };   // no water
 
 /* Builds a day map from `from` to `to` inclusive, with `holes` left incomplete. */
@@ -148,5 +151,37 @@ group("Date arithmetic survives a daylight saving change");
 }
 
 /* ------------------------------------------------------------------ */
+group("Water is counted in glasses");
+{
+  eq(waterCount({}), 0, "nothing logged is nothing drunk");
+  eq(waterCount({ water: 3 }), 3, "three glasses");
+  eq(waterCount({ water: WATER_UNITS }), WATER_UNITS, "eight glasses");
+  eq(waterCount({ water: true }), WATER_UNITS, "days logged before glasses existed still count");
+  eq(waterCount({ water: 99 }), WATER_UNITS, "clamped at a gallon");
+  eq(waterCount({ water: -3 }), 0, "clamped at empty");
+  eq(waterCount({ water: "lots" }), 0, "junk reads as empty");
+
+  eq(waterDone({ water: 7 }), false, "seven glasses is not a gallon");
+  eq(waterDone({ water: 8 }), true, "eight is");
+  eq(waterDone({ water: true }), true, "and so is the old format");
+}
+{
+  // A part-drunk gallon must not quietly complete the day.
+  const days = { d: { w1: 1, w2: 1, water: 7, read: 1, diet: 1, photo: true } };
+  eq(doneCount(days, "d"), 5, "seven glasses leaves the day at five of six");
+  eq(isComplete(days, "d"), false, "so the day is not complete");
+
+  const legacy = { d: { w1: 1, w2: 1, water: true, read: 1, diet: 1, photo: true } };
+  eq(isComplete(legacy, "d"), true, "a day logged in the old format is still complete");
+}
+{
+  // Scoring has to agree: a run of seven-glass days is a run of misses.
+  const days = {};
+  for (let d = 1; d <= 5; d++) days["2026-08-0" + d] = { w1: 1, w2: 1, water: 7, read: 1, diet: 1, photo: true };
+  const sc = scoreFor({ start: "2026-08-01", tz: "America/New_York" }, days, { today: "2026-08-06" });
+  eq(sc.misses, 5, "five short-of-a-gallon days are five misses");
+  eq(sc.count, 0, "and score nothing");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

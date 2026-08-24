@@ -55,11 +55,29 @@ export const zoneName = (tz) => String(tz).split("/").pop().replace(/_/g, " ");
 export const TASK_KEYS = ["w1", "w2", "water", "read", "diet"];
 export const REQUIRED = TASK_KEYS.length + 1;   // the five boxes plus the photo
 
+/* Water is counted in glasses rather than as one checkbox: eight of them,
+ * sixteen ounces each, which is the gallon. Days logged before this existed
+ * stored `water: true`, so that still reads as a full gallon. */
+export const WATER_UNITS = 8;
+export const WATER_OZ = 16;
+export const WATER_TOTAL = WATER_UNITS * WATER_OZ;
+
+export function waterCount(rec) {
+  const w = rec?.water;
+  if (w === true) return WATER_UNITS;
+  if (typeof w === "number" && isFinite(w)) return Math.max(0, Math.min(WATER_UNITS, Math.round(w)));
+  return 0;
+}
+export const waterDone = (rec) => waterCount(rec) >= WATER_UNITS;
+
 export function doneCount(days, iso) {
   const r = days?.[iso];
   if (!r) return 0;
   let n = 0;
-  for (const k of TASK_KEYS) if (r[k]) n++;
+  for (const k of TASK_KEYS) {
+    if (k === "water") { if (waterDone(r)) n++; }
+    else if (r[k]) n++;
+  }
   if (r.photo) n++;
   return n;
 }
