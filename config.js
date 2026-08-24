@@ -14,13 +14,13 @@
  * work of keeping people out. */
 
 export const FIREBASE = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyCUXgLZkxoNUZpjtx-jyPnEMw232r9hY3U",
+  authDomain: "hard-1599c.firebaseapp.com",
+  databaseURL: "https://hard-1599c-default-rtdb.firebaseio.com",
+  projectId: "hard-1599c",
+  storageBucket: "hard-1599c.firebasestorage.app",
+  messagingSenderId: "132417017058",
+  appId: "1:132417017058:web:e2bb6a905b5b77f8ccbabb"
 };
 
 /* The two columns. On first sign-in each person claims one, and the rules

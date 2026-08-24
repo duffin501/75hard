@@ -12,7 +12,7 @@
  *   Icons, fonts, the pinned Firebase SDK  ->  cache first.
  *     These are effectively immutable, and they are the slow ones. */
 
-const CACHE = "75hard-v4";
+const CACHE = "75hard-v5";
 const SDK = "https://www.gstatic.com/firebasejs/11.10.0/";
 
 const CODE = ["./", "index.html", "styles.css", "app.js", "core.js", "config.js", "manifest.webmanifest"];
