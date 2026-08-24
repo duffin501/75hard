@@ -19,7 +19,7 @@ import {
   pad, addDays, diffDays, utc, isoIn, untilMidnight,
   fmt, pretty, shortDate, longDate, zoneName,
   doneCount as countDone, isComplete as complete, scoreFor,
-  waterCount, waterDone, WATER_UNITS, WATER_OZ, WATER_TOTAL,
+  waterOunces, waterDone, WATER_TOTAL, WATER_STEPS, WATER_MAX,
   TASK_KEYS, REQUIRED
 } from "./core.js";
 
@@ -60,6 +60,9 @@ const GOOGLE = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
   '<path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.4 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3C3.7 21.4 7.6 24 12 24z"/>' +
   '<path fill="#FBBC05" d="M5.6 14.7a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.7l3.8-3z"/>' +
   '<path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.2 15.1 0 12 0 7.6 0 3.7 2.6 1.8 6.4l3.8 3C6.5 6.7 9 4.8 12 4.8z"/></svg>';
+
+const RESET = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M3.5 12a8.5 8.5 0 1 0 2.9-6.4"/><path d="M3 4.2v5h5"/></svg>';
 
 const ICONS = {
   today: '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12.5l2.8 2.8L16.5 9"/></svg>',
@@ -279,24 +282,28 @@ async function toggleTask(key) {
   try {
     if (key === "water") {
       // The row's own checkbox fills or empties the whole gallon at once.
-      waterDone(rec) ? await remove(node) : await set(node, WATER_UNITS);
+      await writeWater(waterDone(rec) ? 0 : WATER_TOTAL);
       return;
     }
     rec[key] ? await remove(node) : await set(node, true);
   } catch (e) { flashError(e); }
 }
 
-/* Tapping the glass you are already on empties it, so the row works both
- * ways without a second control. */
-async function setWater(n) {
+/* Every write lands on `waterOz` and clears the old key, so a day only ever
+ * carries one format once it has been touched. */
+async function writeWater(oz) {
   if (S.phase !== "ready") return;
   const iso = isoIn(person(S.me).tz);
-  const cur = waterCount(dayRec(S.me, iso));
-  const next = cur === n ? n - 1 : n;
-  const node = ref(db, `days/${S.me}/${iso}/water`);
-  try { next <= 0 ? await remove(node) : await set(node, next); }
-  catch (e) { flashError(e); }
+  const rec = dayRec(S.me, iso);
+  const next = Math.max(0, Math.min(WATER_MAX, Math.round(oz)));
+  try {
+    const node = ref(db, `days/${S.me}/${iso}/waterOz`);
+    next <= 0 ? await remove(node) : await set(node, next);
+    if (rec.water !== undefined) await remove(ref(db, `days/${S.me}/${iso}/water`));
+  } catch (e) { flashError(e); }
 }
+const addWater = (oz) => writeWater(waterOunces(dayRec(S.me, isoIn(person(S.me).tz))) + oz);
+const resetWater = () => writeWater(0);
 
 async function saveField(field, value) {
   try { await set(ref(db, `people/${S.me}/${field}`), value); }
@@ -514,9 +521,9 @@ function viewToday(p) {
   const thumb = thumbOf(p.id, iso);
   const busy = !!S.upload;
 
-  const glasses = waterCount(r);
+  const oz = waterOunces(r);
   const rows = TASKS.map((t) => {
-    if (t.k === "water") return waterRow(glasses);
+    if (t.k === "water") return waterRow(oz);
     return `
     <button class="task${r[t.k] ? " on" : ""}" data-task="${t.k}">
       <span class="box">${CHECK}</span>
@@ -559,25 +566,32 @@ function viewToday(p) {
     ${S.authErr ? `<div class="banner warn">${esc(S.authErr)}</div>` : ""}`;
 }
 
-function waterRow(glasses) {
-  const full = glasses >= WATER_UNITS;
-  const pips = Array.from({ length: WATER_UNITS }, (_, i) => {
-    const on = i < glasses;
-    return `<button class="glass${on ? " on" : ""}" data-water="${i + 1}"
-      aria-label="${(i + 1) * WATER_OZ} ounces"
-      aria-pressed="${on}">${on ? CHECK : ""}</button>`;
-  }).join("");
+function waterRow(oz) {
+  const full = oz >= WATER_TOTAL;
+  const pct = Math.min(100, Math.round(oz / WATER_TOTAL * 100));
+  // The total is printed twice at the same offset, once under the fill and
+  // once over it, so it stays legible whatever the level.
+  const label = full ? `${oz} oz &middot; gallon done` : `${oz} of ${WATER_TOTAL} oz`;
+  const adds = WATER_STEPS.map((n) =>
+    `<button class="addw" data-add="${n}" aria-label="Add ${n} ounces">+${n}<span>oz</span></button>`).join("");
 
   return `
     <button class="task${full ? " on" : ""}" data-task="water">
       <span class="box">${CHECK}</span>
       <span class="lbl"><b>One gallon of water</b>
-        <small>${glasses * WATER_OZ} of ${WATER_TOTAL} oz &middot; ${WATER_OZ} oz a glass</small></span>
-      <span class="tag">${glasses}/${WATER_UNITS}</span>
+        <small>${full ? "Gallon done" : `${WATER_TOTAL - oz} oz to go`}</small></span>
+      <span class="tag">${oz} oz</span>
     </button>
     <div class="watertray">
-      <div class="glasses">${pips}</div>
-      <div class="waterbar"><i style="width:${Math.round(glasses / WATER_UNITS * 100)}%"></i></div>
+      <div class="waterbar" role="progressbar" aria-valuenow="${oz}" aria-valuemin="0"
+        aria-valuemax="${WATER_TOTAL}" aria-label="Water toward a gallon">
+        <div class="under"><span class="lab">${label}</span></div>
+        <div class="fill" style="width:${pct}%"><span class="lab">${label}</span></div>
+      </div>
+      <div class="addrow">${adds}
+        <button class="addw reset" data-water-reset="1" aria-label="Start the water over"
+          ${oz ? "" : "disabled"}>${RESET}</button>
+      </div>
     </div>`;
 }
 
@@ -620,9 +634,9 @@ function viewUs(me) {
   const thumb = thumbOf(them.id, sc.today);
   const items = TASKS.map((t) => {
     if (t.k === "water") {
-      const g = waterCount(r);
+      const o = waterOunces(r);
       return `<li class="${waterDone(r) ? "on" : ""}"><span class="m">${CHECK}</span>${t.label}
-        ${g && !waterDone(r) ? `<span class="mini">${g}/${WATER_UNITS}</span>` : ""}</li>`;
+        ${o && !waterDone(r) ? `<span class="mini">${o} oz</span>` : ""}</li>`;
     }
     return `<li class="${r[t.k] ? "on" : ""}"><span class="m">${CHECK}</span>${t.label}</li>`;
   }).join("") +
@@ -790,12 +804,13 @@ function wire() {
     window.scrollTo(0, 0);
   });
 
-  on("[data-water]", "click", (e) => {
+  on("[data-add]", "click", (e) => {
     const b = e.currentTarget;
     b.classList.add("pop");
-    setTimeout(() => b.classList.remove("pop"), 260);
-    setWater(+b.getAttribute("data-water"));
+    setTimeout(() => b.classList.remove("pop"), 240);
+    addWater(+b.getAttribute("data-add"));
   });
+  on("[data-water-reset]", "click", resetWater);
 
   on("[data-task]", "click", (e) => {
     const btn = e.currentTarget;

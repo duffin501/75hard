@@ -55,20 +55,29 @@ export const zoneName = (tz) => String(tz).split("/").pop().replace(/_/g, " ");
 export const TASK_KEYS = ["w1", "w2", "water", "read", "diet"];
 export const REQUIRED = TASK_KEYS.length + 1;   // the five boxes plus the photo
 
-/* Water is counted in glasses rather than as one checkbox: eight of them,
- * sixteen ounces each, which is the gallon. Days logged before this existed
- * stored `water: true`, so that still reads as a full gallon. */
-export const WATER_UNITS = 8;
-export const WATER_OZ = 16;
-export const WATER_TOTAL = WATER_UNITS * WATER_OZ;
+/* Water is tracked in ounces, added 8, 16 or 24 at a time, against a gallon.
+ *
+ * It has been stored three ways over the life of this app, and old days must
+ * keep reading correctly, so ounces live under their own key rather than
+ * overloading the old one. `water: 8` is genuinely ambiguous between eight
+ * glasses and eight ounces; `waterOz` is not. */
+export const WATER_TOTAL = 128;          // ounces in a gallon
+export const WATER_STEPS = [8, 16, 24];  // the add buttons
+export const WATER_MAX = 512;            // a sanity ceiling on what gets stored
+const GLASS_OZ = 16;                     // the short-lived middle format
 
-export function waterCount(rec) {
-  const w = rec?.water;
-  if (w === true) return WATER_UNITS;
-  if (typeof w === "number" && isFinite(w)) return Math.max(0, Math.min(WATER_UNITS, Math.round(w)));
+export function waterOunces(rec) {
+  if (!rec) return 0;
+  const clamp = (n) => Math.max(0, Math.min(WATER_MAX, Math.round(n)));
+
+  if (typeof rec.waterOz === "number" && isFinite(rec.waterOz)) return clamp(rec.waterOz);
+
+  const w = rec.water;
+  if (w === true) return WATER_TOTAL;                       // the original checkbox
+  if (typeof w === "number" && isFinite(w)) return clamp(w * GLASS_OZ);   // the glasses
   return 0;
 }
-export const waterDone = (rec) => waterCount(rec) >= WATER_UNITS;
+export const waterDone = (rec) => waterOunces(rec) >= WATER_TOTAL;
 
 export function doneCount(days, iso) {
   const r = days?.[iso];

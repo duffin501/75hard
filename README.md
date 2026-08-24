@@ -11,7 +11,7 @@ Every day, before your own local midnight:
 
 - Workout one, 30 minutes minimum
 - Workout two, 30 minutes minimum, **outside**
-- One gallon of water, logged as eight 16 oz glasses
+- One gallon of water, added 8, 16 or 24 oz at a time
 - Ten pages of non-fiction
 - Your diet rule (each person sets their own)
 - A progress photo
@@ -56,7 +56,7 @@ shared state, Firebase Auth for Google sign-in.
 | `emails.local.json` | Both Google addresses. Gitignored, never served |
 | `sw.js` | Service worker, so it opens with no signal |
 | `tools/build-rules.mjs` | Generates the security rules from `emails.local.json` |
-| `tools/selftest.mjs` | 61 assertions against `core.js` |
+| `tools/selftest.mjs` | 74 assertions against `core.js` |
 | `icons/make_icons.py` | Generates the app icons, no dependencies |
 
 ```bash

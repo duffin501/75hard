@@ -178,21 +178,36 @@ img{max-width:100%; display:block}
   padding:3px 6px; border-radius:2px; border:1px solid var(--rule-2); color:var(--ink-3); white-space:nowrap}
 .task .tag.out{color:var(--jon); border-color:var(--jon)}
 
-/* Water: eight glasses of 16 oz, and a bar that closes at the gallon. */
+/* Water: add it in 8, 16 or 24 oz, with the running total sitting on the
+   fill bar. The total is drawn twice at the same offset, once beneath the
+   fill and once clipped inside it, so it reads at any level. */
 .watertray{background:var(--surface); border-bottom:1px solid var(--rule); padding:0 15px 13px}
-.glasses{display:grid; grid-template-columns:repeat(8,1fr); gap:5px; margin-bottom:11px}
-.glass{
-  height:44px; border:2px solid var(--rule-2); border-radius:5px; background:var(--bg);
-  display:grid; place-items:center; padding:0;
-  transition:background .16s cubic-bezier(.2,.8,.3,1), border-color .16s ease, transform .16s ease;
+.waterbar{position:relative; height:34px; border-radius:6px; background:var(--sunk); overflow:hidden}
+.waterbar .under,.waterbar .fill{position:absolute; top:0; bottom:0; left:0; overflow:hidden}
+.waterbar .under{right:0}
+.waterbar .fill{width:0; background:var(--accent);
+  transition:width .34s cubic-bezier(.2,.7,.3,1)}
+.waterbar .lab{position:absolute; left:13px; top:0; bottom:0; display:flex; align-items:center;
+  white-space:nowrap; font-family:"DM Mono",monospace; font-size:12.5px; letter-spacing:.03em;
+  font-variant-numeric:tabular-nums}
+.waterbar .under .lab{color:var(--ink-2)}
+.waterbar .fill .lab{color:var(--surface)}
+
+.addrow{display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:7px; margin-top:11px}
+.addw{
+  min-height:48px; border:1px solid var(--rule-2); border-radius:5px; background:var(--bg);
+  font-size:16px; font-weight:700; letter-spacing:-.01em; padding:0;
+  display:flex; align-items:center; justify-content:center; gap:3px;
+  font-variant-numeric:tabular-nums;
+  transition:background .14s ease, border-color .14s ease, transform .14s ease;
 }
-.glass svg{width:13px; height:13px; stroke:var(--surface); stroke-width:3.8; fill:none;
+.addw span{font-size:11px; font-weight:500; color:var(--ink-3)}
+.addw:hover:not(:disabled){border-color:var(--accent)}
+.addw.pop{transform:scale(.95); background:var(--accent-soft); border-color:var(--accent)}
+.addw.reset{width:48px; color:var(--ink-3)}
+.addw.reset svg{width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2;
   stroke-linecap:round; stroke-linejoin:round}
-.glass.on{background:var(--accent); border-color:var(--accent)}
-.glass.pop{transform:scale(1.14)}
-.waterbar{height:7px; background:var(--sunk); border-radius:999px; overflow:hidden}
-.waterbar i{display:block; height:100%; width:0; background:var(--accent); border-radius:999px;
-  transition:width .32s cubic-bezier(.2,.7,.3,1)}
+.addw:disabled{opacity:.4}
 .task .tag{font-variant-numeric:tabular-nums}
 
 .photorow{display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center;

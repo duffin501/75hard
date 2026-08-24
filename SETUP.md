@@ -157,9 +157,9 @@ opens with no signal, though it needs a connection to sync.
 node tools/selftest.mjs
 ```
 
-61 assertions covering the penalty, the floor at zero, the moving finish date,
-two timezones at one instant, the water glasses, and date arithmetic across a
-daylight saving change. Run it after touching `core.js`.
+74 assertions covering the penalty, the floor at zero, the moving finish date,
+two timezones at one instant, the water totals in all three formats they have
+been stored in, and date arithmetic across a daylight saving change. Run it after touching `core.js`.
 
 ## Regenerating the icons
 
@@ -171,5 +171,5 @@ Pure Python, no dependencies.
 
 ## Deploying a change
 
-Bump `CACHE` in `sw.js` (`75hard-v7` becomes `75hard-v8`) so installed phones
+Bump `CACHE` in `sw.js` (`75hard-v8` becomes `75hard-v9`) so installed phones
 pick the new build up promptly, then commit and push.

@@ -5,7 +5,7 @@
 
 import {
   scoreFor, isoIn, addDays, diffDays,
-  waterCount, waterDone, doneCount, isComplete, WATER_UNITS
+  waterOunces, waterDone, doneCount, isComplete, WATER_TOTAL, WATER_STEPS, WATER_MAX
 } from "../core.js";
 
 let pass = 0, fail = 0;
@@ -16,7 +16,7 @@ const eq = (got, want, what) => {
 };
 const group = (name) => console.log(`\n${name}`);
 
-const FULL = { w1: 1, w2: 1, water: WATER_UNITS, read: 1, diet: 1, photo: true };
+const FULL = { w1: 1, w2: 1, waterOz: WATER_TOTAL, read: 1, diet: 1, photo: true };
 const PARTIAL = { w1: 1, w2: 1, read: 1, diet: 1, photo: true };   // no water
 
 /* Builds a day map from `from` to `to` inclusive, with `holes` left incomplete. */
@@ -151,36 +151,83 @@ group("Date arithmetic survives a daylight saving change");
 }
 
 /* ------------------------------------------------------------------ */
-group("Water is counted in glasses");
+group("Water is counted in ounces");
 {
-  eq(waterCount({}), 0, "nothing logged is nothing drunk");
-  eq(waterCount({ water: 3 }), 3, "three glasses");
-  eq(waterCount({ water: WATER_UNITS }), WATER_UNITS, "eight glasses");
-  eq(waterCount({ water: true }), WATER_UNITS, "days logged before glasses existed still count");
-  eq(waterCount({ water: 99 }), WATER_UNITS, "clamped at a gallon");
-  eq(waterCount({ water: -3 }), 0, "clamped at empty");
-  eq(waterCount({ water: "lots" }), 0, "junk reads as empty");
+  eq(waterOunces({}), 0, "nothing logged is nothing drunk");
+  eq(waterOunces({ waterOz: 48 }), 48, "ounces read straight back");
+  eq(waterOunces({ waterOz: 0 }), 0, "an explicit zero is zero");
+  eq(waterOunces({ waterOz: WATER_MAX + 500 }), WATER_MAX, "clamped at the ceiling");
+  eq(waterOunces({ waterOz: -20 }), 0, "clamped at empty");
+  eq(waterOunces({ waterOz: "lots" }), 0, "junk reads as empty");
 
-  eq(waterDone({ water: 7 }), false, "seven glasses is not a gallon");
-  eq(waterDone({ water: 8 }), true, "eight is");
-  eq(waterDone({ water: true }), true, "and so is the old format");
+  eq(waterDone({ waterOz: 120 }), false, "120 oz is short of a gallon");
+  eq(waterDone({ waterOz: WATER_TOTAL }), true, "128 is the gallon");
+  eq(waterDone({ waterOz: 200 }), true, "drinking more than a gallon still counts");
 }
+
+group("Water written in older shapes still reads");
 {
-  // A part-drunk gallon must not quietly complete the day.
-  const days = { d: { w1: 1, w2: 1, water: 7, read: 1, diet: 1, photo: true } };
-  eq(doneCount(days, "d"), 5, "seven glasses leaves the day at five of six");
+  // Three formats have existed. Days logged under any of them must survive.
+  eq(waterOunces({ water: true }), WATER_TOTAL, "the original checkbox was a gallon");
+  eq(waterOunces({ water: 8 }), WATER_TOTAL, "eight glasses was a gallon");
+  eq(waterOunces({ water: 3 }), 48, "three glasses was 48 oz");
+  eq(waterOunces({ water: 0 }), 0, "no glasses was nothing");
+  eq(waterOunces({ waterOz: 40, water: 8 }), 40,
+     "once ounces are written they win, so a half-migrated day is not double counted");
+
+  eq(isComplete({ d: { w1: 1, w2: 1, water: true, read: 1, diet: 1, photo: true } }, "d"), true,
+     "a day from the checkbox era is still complete");
+  eq(isComplete({ d: { w1: 1, w2: 1, water: 8, read: 1, diet: 1, photo: true } }, "d"), true,
+     "and so is one from the glasses era");
+}
+
+group("A short gallon does not complete the day");
+{
+  const days = { d: { w1: 1, w2: 1, waterOz: 120, read: 1, diet: 1, photo: true } };
+  eq(doneCount(days, "d"), 5, "120 oz leaves the day at five of six");
   eq(isComplete(days, "d"), false, "so the day is not complete");
 
-  const legacy = { d: { w1: 1, w2: 1, water: true, read: 1, diet: 1, photo: true } };
-  eq(isComplete(legacy, "d"), true, "a day logged in the old format is still complete");
-}
-{
-  // Scoring has to agree: a run of seven-glass days is a run of misses.
-  const days = {};
-  for (let d = 1; d <= 5; d++) days["2026-08-0" + d] = { w1: 1, w2: 1, water: 7, read: 1, diet: 1, photo: true };
-  const sc = scoreFor({ start: "2026-08-01", tz: "America/New_York" }, days, { today: "2026-08-06" });
-  eq(sc.misses, 5, "five short-of-a-gallon days are five misses");
+  const scDays = {};
+  for (let d = 1; d <= 5; d++) scDays[`2026-08-0${d}`] = { w1: 1, w2: 1, waterOz: 120, read: 1, diet: 1, photo: true };
+  const sc = scoreFor({ start: "2026-08-01", tz: "America/New_York" }, scDays, { today: "2026-08-06" });
+  eq(sc.misses, 5, "five short days are five misses");
   eq(sc.count, 0, "and score nothing");
+}
+
+group("The add buttons can land on a gallon, and overshooting is fine");
+{
+  eq(WATER_STEPS.join(","), "8,16,24", "the three offered amounts");
+
+  // 24 does not divide 128, so the biggest button alone overshoots. What
+  // matters is that some combination lands exactly, and that going over
+  // still counts rather than being treated as a mistake.
+  const reachable = (target, steps) => {
+    const seen = new Set([0]);
+    let edge = [0];
+    while (edge.length) {
+      const next = [];
+      for (const v of edge) for (const st of steps) {
+        const n = v + st;
+        if (n === target) return true;
+        if (n < target && !seen.has(n)) { seen.add(n); next.push(n); }
+      }
+      edge = next;
+    }
+    return false;
+  };
+  eq(reachable(WATER_TOTAL, WATER_STEPS), true, "a gallon is reachable exactly");
+  eq(WATER_TOTAL % 24, 8, "though not by +24 alone: it lands on 120, then +8 finishes it");
+
+  let oz = 0, taps = 0;
+  while (oz + 24 <= WATER_TOTAL) { oz += 24; taps++; }
+  eq(oz, 120, "five taps of +24 gets to 120");
+  eq(oz + 8, WATER_TOTAL, "and one +8 closes it");
+
+  // Overshooting records what was actually drunk and still completes the day.
+  eq(waterDone({ waterOz: 144 }), true, "144 oz still counts as the gallon");
+  const over = { d: { w1: 1, w2: 1, waterOz: 144, read: 1, diet: 1, photo: true } };
+  eq(isComplete(over, "d"), true, "and completes the day");
+  eq(waterOunces({ waterOz: 144 }), 144, "without quietly rounding down to 128");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
