@@ -1,0 +1,12 @@
+{
+  "name": "75hard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mary and Jon's shared 75 Hard tracker.",
+  "scripts": {
+    "test": "node tools/selftest.mjs",
+    "rules": "node tools/build-rules.mjs",
+    "icons": "python icons/make_icons.py"
+  }
+}

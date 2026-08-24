@@ -1,0 +1,11 @@
+# Real addresses. These belong in the Firebase rules, never in the repo and
+# never in anything the browser downloads.
+emails.local.json
+
+# Generated from emails.local.json by tools/build-rules.mjs. It contains both
+# addresses, so it is not committed either. Regenerate it when you need it.
+database.rules.json
+
+node_modules/
+.DS_Store
+Thumbs.db
