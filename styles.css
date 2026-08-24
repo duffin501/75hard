@@ -41,6 +41,8 @@ body{
   -webkit-font-smoothing:antialiased; overscroll-behavior:none;
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+button,.task,.pick,.day{-webkit-tap-highlight-color:transparent; touch-action:manipulation}
+button{-webkit-user-select:none; user-select:none}
 :focus-visible{outline:2px solid var(--accent,var(--ink)); outline-offset:2px; border-radius:2px}
 img{max-width:100%; display:block}
 [hidden]{display:none !important}
@@ -64,8 +66,8 @@ img{max-width:100%; display:block}
 .link{font-family:"DM Mono",monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3)}
 .link[data-s="off"]{color:var(--miss)}
 .link[data-s="sync"]{color:var(--jon)}
-.who{display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px;
-  border:1px solid var(--rule-2); font-size:12.5px; font-weight:600}
+.who{display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px;
+  min-height:36px; border:1px solid var(--rule-2); font-size:12.5px; font-weight:600}
 .who .dot{width:7px; height:7px; border-radius:50%; background:currentColor}
 .who.mary{color:var(--mary)} .who.jon{color:var(--jon)}
 
@@ -105,7 +107,12 @@ img{max-width:100%; display:block}
   border-radius:50%; background:var(--miss)}
 
 /* ===================== full-screen states ===================== */
-.screen{height:100dvh; display:grid; place-items:center; padding:32px 20px; text-align:center; position:relative}
+.screen{
+  height:100dvh; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+  display:grid; place-items:center; place-items:safe center;
+  padding:max(32px,env(safe-area-inset-top)) 20px max(32px,env(safe-area-inset-bottom));
+  text-align:center; position:relative;
+}
 .screen::before{content:""; position:absolute; inset:0; pointer-events:none; opacity:var(--grain);
   background-image:radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0); background-size:4px 4px}
 .screen-in{max-width:460px; display:grid; gap:22px; justify-items:center; position:relative}
@@ -177,13 +184,14 @@ img{max-width:100%; display:block}
 .shot.empty{display:grid; place-items:center; cursor:default; text-align:center; padding:4px}
 
 .btn{border:1px solid var(--rule-2); border-radius:3px; padding:9px 13px; font-size:13px;
+  min-height:44px; display:inline-flex; align-items:center; justify-content:center;
   font-weight:600; background:var(--bg); white-space:nowrap; transition:background .12s ease}
 .btn:hover:not(:disabled){background:var(--surface-2)}
 .btn:disabled{opacity:.5; cursor:default}
 .btn.primary{background:var(--accent); border-color:var(--accent); color:var(--surface)}
 .btn.ghost{border-color:transparent; color:var(--ink-3); padding:9px 6px}
 .btn.ghost:hover{color:var(--miss); background:transparent}
-.btn.sm{padding:6px 10px; font-size:12px}
+.btn.sm{padding:6px 12px; font-size:12px; min-height:40px}
 
 .banner{border:1px solid var(--rule); border-top:none; background:var(--sunk);
   padding:13px 15px; font-size:13.5px; color:var(--ink-2); line-height:1.45}
@@ -265,7 +273,7 @@ img{max-width:100%; display:block}
 .dow span{text-align:center; font-family:"DM Mono",monospace; font-size:9px;
   letter-spacing:.04em; color:var(--ink-3); text-transform:uppercase}
 .day{aspect-ratio:1; border-radius:2px; display:grid; place-items:center; position:relative;
-  font-family:"DM Mono",monospace; font-variant-numeric:tabular-nums; font-size:11.5px;
+  font-family:"DM Mono",monospace; font-variant-numeric:tabular-nums; font-size:12.5px;
   color:var(--ink-3); background:transparent; border:1px solid transparent}
 .day.blank{visibility:hidden}
 .day.off{opacity:.3}
@@ -295,8 +303,8 @@ img{max-width:100%; display:block}
 .fld{display:grid; gap:4px}
 .fld label{font-family:"DM Mono",monospace; font-size:9.5px; letter-spacing:.11em;
   text-transform:uppercase; color:var(--ink-3)}
-.fld input,.fld select{font:inherit; font-size:14px; padding:9px 10px; border:1px solid var(--rule-2);
-  border-radius:3px; background:var(--bg); color:var(--ink); width:100%}
+.fld input,.fld select{font:inherit; font-size:16px; padding:10px; border:1px solid var(--rule-2);
+  border-radius:3px; background:var(--bg); color:var(--ink); width:100%; min-height:44px}
 .fld input:disabled,.fld select:disabled{opacity:.55; cursor:not-allowed}
 .fld input:focus,.fld select:focus{outline:none; border-color:var(--accent)}
 .fld .hint{font-size:12px; color:var(--ink-3); line-height:1.4}

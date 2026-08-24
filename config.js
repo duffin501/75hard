@@ -34,7 +34,7 @@ export const PEOPLE = [
     name: "Mary",
     relation: "Sister",
     tz: "America/New_York",
-    start: "2026-08-23",
+    start: "2026-08-24",
     diet: "150 g protein, track every calorie"
   },
   {
@@ -42,7 +42,7 @@ export const PEOPLE = [
     name: "Jon",
     relation: "Brother",
     tz: "America/Denver",
-    start: "2026-08-23",
+    start: "2026-08-24",
     diet: "Protein-dense breakfast"
   }
 ];
