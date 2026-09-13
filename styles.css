@@ -91,6 +91,12 @@ img{max-width:100%; display:block}
 .ck.urgent{background:var(--miss-soft); border-left-color:var(--miss)}
 .ck.urgent .t,.ck.urgent .st,.ck.urgent .nm{color:var(--miss)}
 .ck.urgent .t{animation:pulse 1.6s ease-in-out infinite}
+/* Six ticked but the server has not acknowledged them. Deliberately reads
+   like the miss state, not the done state: unacknowledged is not banked. */
+.ck.unsaved{background:var(--miss-soft); border-left-color:var(--miss)}
+.ck.unsaved .t,.ck.unsaved .st{color:var(--miss)}
+.ck.unsaved .st{font-weight:600}
+.link[data-s="sync"]{color:var(--miss); animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 
 /* Bottom padding clears the fixed nav so nothing hides behind it. */

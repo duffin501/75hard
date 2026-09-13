@@ -80,6 +80,7 @@ const S = {
   tab: "today",
   data: { meta: {}, people: {}, days: {} },
   online: true,
+  pending: 0,             // writes the server has not acknowledged yet
   authErr: null,
   claimErr: null,
   lightbox: null,
@@ -114,9 +115,12 @@ const accent = (id) => id === "mary"
   ? "--accent:var(--mary);--accent-soft:var(--mary-soft)"
   : "--accent:var(--jon);--accent-soft:var(--jon-soft)";
 
-function statusOf(sc) {
+function statusOf(sc, id) {
   if (sc.finished) return { c: "done", t: "Finished" };
-  if (sc.todayDone) return { c: "ok", t: "Locked in" };
+  // Only your own column can be unsaved; his writes are his own problem.
+  if (sc.todayDone) return (id === S.me && unsaved())
+    ? { c: "bad", t: "Not saved" }
+    : { c: "ok", t: "Locked in" };
   if (sc.todayCount === 0) return { c: "bad", t: "Nothing yet" };
   return { c: "warn", t: `${sc.todayCount} of 6` };
 }
@@ -268,6 +272,19 @@ async function signIn() {
 
 /* ===================== writes ===================== */
 
+/* Realtime Database applies a write to local state and fires the listener
+ * before the server has seen it, and its pending-write queue on web lives in
+ * memory only — there is no cross-reload persistence the way Firestore has.
+ * So a tick made with no signal lights the box, banks nothing, and dies with
+ * the tab. Every write goes through here so the app can tell the difference
+ * between "you tapped it" and "it is on the server". */
+function tracked(promise) {
+  S.pending++;
+  render();
+  return promise.finally(() => { S.pending = Math.max(0, S.pending - 1); render(); });
+}
+const unsaved = () => S.pending > 0;
+
 function flashError(e) {
   S.authErr = `That did not save (${e?.code || e?.message || "unknown error"}).`;
   render();
@@ -285,7 +302,7 @@ async function toggleTask(key) {
       await writeWater(waterDone(rec) ? 0 : WATER_TOTAL);
       return;
     }
-    rec[key] ? await remove(node) : await set(node, true);
+    await tracked(rec[key] ? remove(node) : set(node, true));
   } catch (e) { flashError(e); }
 }
 
@@ -298,8 +315,8 @@ async function writeWater(oz) {
   const next = Math.max(0, Math.min(WATER_MAX, Math.round(oz)));
   try {
     const node = ref(db, `days/${S.me}/${iso}/waterOz`);
-    next <= 0 ? await remove(node) : await set(node, next);
-    if (rec.water !== undefined) await remove(ref(db, `days/${S.me}/${iso}/water`));
+    await tracked(next <= 0 ? remove(node) : set(node, next));
+    if (rec.water !== undefined) await tracked(remove(ref(db, `days/${S.me}/${iso}/water`)));
   } catch (e) { flashError(e); }
 }
 const addWater = (oz) => writeWater(waterOunces(dayRec(S.me, isoIn(person(S.me).tz))) + oz);
@@ -360,8 +377,8 @@ async function savePhoto(file) {
     src.close?.();
 
     S.upload = { pct: 0.7, label: "Saving" }; paintUpload();
-    await set(ref(db, `pics/${S.me}/${iso}`), { full, thumb });
-    await set(ref(db, `days/${S.me}/${iso}/photo`), true);
+    await tracked(set(ref(db, `pics/${S.me}/${iso}`), { full, thumb }));
+    await tracked(set(ref(db, `days/${S.me}/${iso}/photo`), true));
 
     PICS.set(`${S.me}|${iso}|full`, full);
     PICS.set(`${S.me}|${iso}|thumb`, thumb);
@@ -376,8 +393,8 @@ async function savePhoto(file) {
 async function removePhoto() {
   const iso = isoIn(person(S.me).tz);
   try {
-    await remove(ref(db, `days/${S.me}/${iso}/photo`));
-    await remove(ref(db, `pics/${S.me}/${iso}`));
+    await tracked(remove(ref(db, `days/${S.me}/${iso}/photo`)));
+    await tracked(remove(ref(db, `pics/${S.me}/${iso}`)));
     PICS.delete(`${S.me}|${iso}|full`);
     PICS.delete(`${S.me}|${iso}|thumb`);
     render();
@@ -552,7 +569,11 @@ function viewToday(p) {
 
   const banner = sc.finished
     ? '<div class="banner good"><b>Seventy-five.</b> You finished the whole thing.</div>'
-    : sc.todayDone
+    : sc.todayDone && unsaved()
+      ? `<div class="banner warn"><b>Not saved yet.</b> ${plural(S.pending, "change is", "changes are")}
+         still waiting on the server${S.online ? "" : ", and you are offline"}. Leave this screen now and
+         ${S.pending === 1 ? "it is" : "they are"} gone. Keep the app open until this clears.</div>`
+      : sc.todayDone
       ? `<div class="banner good"><b>Today is banked.</b> Finish line holds at <b>${longDate(sc.finish)}</b>.</div>`
       : `<div class="banner warn"><b>${plural(sc.left, "box", "boxes")} left.</b>
          Miss tonight and your finish line moves from <b>${shortDate(sc.finish)}</b> to
@@ -598,7 +619,7 @@ function waterRow(oz) {
 /* ---------- us ---------- */
 function rigHTML(p) {
   const sc = score(p.id);
-  const st = statusOf(sc);
+  const st = statusOf(sc, p.id);
   const r = dayRec(p.id, sc.today);
   const dots = [...KEYS, "photo"].map((k) =>
     `<span class="${(k === "water" ? waterDone(r) : !!r[k]) ? "on" : ""}"></span>`).join("");
@@ -859,8 +880,9 @@ function wire() {
 function paintLink() {
   const el = document.getElementById("link");
   if (!el) return;
-  el.dataset.s = S.online ? "ok" : "off";
-  el.textContent = S.online ? "live" : "offline";
+  const n = S.pending;
+  el.dataset.s = n > 0 ? "sync" : S.online ? "ok" : "off";
+  el.textContent = n > 0 ? `saving ${n}` : S.online ? "live" : "offline";
 }
 
 function paintUpload() {
@@ -879,12 +901,16 @@ function paintClocks() {
     const sEl = document.getElementById(`s-${p.id}`);
     const urgent = !sc.todayDone && !sc.finished && t.total < 7200;
 
-    box.classList.toggle("done", sc.todayDone || sc.finished);
+    const banked = (sc.todayDone && !(p.id === S.me && unsaved())) || sc.finished;
+    box.classList.toggle("done", banked);
+    box.classList.toggle("unsaved", p.id === S.me && unsaved());
     box.classList.toggle("urgent", urgent);
 
     if (sc.finished) { tEl.textContent = "DONE"; sEl.textContent = "all 75 banked"; continue; }
     tEl.textContent = `${pad(t.h)}:${pad(t.m)}:${pad(t.s)}`;
-    sEl.textContent = sc.todayDone ? "all six done, banked" : plural(sc.left, "box left", "boxes left");
+    sEl.textContent = sc.todayDone
+      ? (p.id === S.me && unsaved() ? "all six done, NOT saved" : "all six done, banked")
+      : plural(sc.left, "box left", "boxes left");
   }
   paintLink();
 }
@@ -903,6 +929,14 @@ setInterval(() => {
 }, 1000);
 
 /* ===================== go ===================== */
+
+/* Closing the tab with writes still queued silently loses them, and the day
+ * scores as a miss. This is the last chance to say so. */
+window.addEventListener("beforeunload", (e) => {
+  if (!unsaved()) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 
 window.addEventListener("online", paintLink);
 window.addEventListener("offline", () => { S.online = false; paintLink(); });
