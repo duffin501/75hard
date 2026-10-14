@@ -47,7 +47,12 @@ export const PEOPLE = [
     tz: "America/Denver",
     zoneLabel: "Utah",
     start: "2026-08-24",
-    diet: "Protein-dense breakfast"
+    diet: "Protein-dense breakfast",
+    // A seventh box, added partway through. It counts from `from` forward in
+    // his own calendar; every day before it still scores on the original six.
+    extras: [
+      { k: "media", label: "Intentional media use", from: "2026-10-14" }
+    ]
   }
 ];
 

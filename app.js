@@ -1,6 +1,6 @@
 /* 75 Hard, shared between two people in two timezones.
  *
- * Rules: all six done before your own local midnight is +1. Anything missing
+ * Rules: every box done before your own local midnight is +1. Anything missing
  * is -10, floored at zero. Past days lock at midnight, so nothing can be
  * back-filled. Every miss shoves your projected finish date later, which is
  * the number that actually stings.
@@ -18,7 +18,7 @@ import { FIREBASE, PEOPLE, GOAL, PENALTY, MOTTO } from "./config.js";
 import {
   pad, addDays, diffDays, utc, isoIn, untilMidnight,
   fmt, pretty, shortDate, longDate, zoneName,
-  doneCount as countDone, isComplete as complete, scoreFor,
+  doneCount as countDone, isComplete as complete, scoreFor, keysOn, requiredOn,
   waterOunces, waterDone, WATER_TOTAL, WATER_STEPS, WATER_MAX,
   TASK_KEYS, REQUIRED
 } from "./core.js";
@@ -40,11 +40,21 @@ const TASKS = [
   { k: "read",  label: "Ten pages",           sub: "Non-fiction only" },
   { k: "diet",  label: "Diet",                sub: "", diet: true }
 ];
-const KEYS = TASK_KEYS;
 if (TASKS.length + 1 !== REQUIRED || TASKS.some((t, i) => t.k !== TASK_KEYS[i])) {
   console.error("TASKS in app.js and TASK_KEYS in core.js disagree. Scoring will be wrong.");
 }
 const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+
+/* The boxes one person owes on one date: the five everybody has, plus any
+ * extra wicket from config.js that has started by then. */
+function tasksOn(p, iso) {
+  const extra = (p.extras || []).filter((x) => x?.k && x.from && iso >= x.from)
+    .map((x) => ({ k: x.k, label: x.label || x.k, sub: x.sub || "" }));
+  return extra.length ? [...TASKS, ...extra] : TASKS;
+}
+/* An extra that starts tomorrow, so the Today view can give a day's warning. */
+const startingTomorrow = (p, iso) => (p.extras || []).filter((x) => x?.from === addDays(iso, 1));
 
 // Roughly 110 KB of JPEG for the keeper, 16 KB for the row thumbnail. Both
 // numbers are the length of the data URL, which is what the database stores.
@@ -102,8 +112,8 @@ const otherId = (id) => PEOPLE.find((p) => p.id !== id)?.id ?? null;
 const daysOf = (id) => S.data.days?.[id] || {};
 const dayRec = (id, iso) => daysOf(id)[iso] || {};
 
-const doneCount = (id, iso) => countDone(daysOf(id), iso);
-const isComplete = (id, iso) => complete(daysOf(id), iso);
+const doneCount = (id, iso) => countDone(daysOf(id), iso, keysOn(person(id), iso));
+const isComplete = (id, iso) => complete(daysOf(id), iso, keysOn(person(id), iso));
 const score = (id) => scoreFor(person(id), daysOf(id), { goal: GOAL, penalty: PENALTY });
 
 /* ===================== small helpers ===================== */
@@ -118,7 +128,7 @@ function statusOf(sc) {
   if (sc.finished) return { c: "done", t: "Finished" };
   if (sc.todayDone) return { c: "ok", t: "Locked in" };
   if (sc.todayCount === 0) return { c: "bad", t: "Nothing yet" };
-  return { c: "warn", t: `${sc.todayCount} of 6` };
+  return { c: "warn", t: `${sc.todayCount} of ${sc.required}` };
 }
 /* The clock says "Virginia", not "New York". If someone changes their
  * timezone from Setup the label would be a lie, so fall back to the zone's
@@ -522,7 +532,7 @@ function viewToday(p) {
   const busy = !!S.upload;
 
   const oz = waterOunces(r);
-  const rows = TASKS.map((t) => {
+  const rows = tasksOn(p, iso).map((t) => {
     if (t.k === "water") return waterRow(oz);
     return `
     <button class="task${r[t.k] ? " on" : ""}" data-task="${t.k}">
@@ -558,10 +568,14 @@ function viewToday(p) {
          Miss tonight and your finish line moves from <b>${shortDate(sc.finish)}</b> to
          <b>${shortDate(sc.finishIfMissed)}</b>, ${plural(sc.costOfMissing, "day", "days")} later.</div>`;
 
+  const soon = startingTomorrow(p, iso).map((x) =>
+    `<div class="banner"><b>Starting tomorrow:</b> ${esc(x.label || x.k)} becomes box
+      ${WORDS[sc.required + 1] || sc.required + 1}. Today still counts on ${WORDS[sc.required] || sc.required}.</div>`).join("");
+
   return `<div class="hd" style="${accent(p.id)}"><h2>Today</h2>
-      <span class="rt">${pretty(iso)} &nbsp;·&nbsp; ${sc.todayCount}/6</span></div>
+      <span class="rt">${pretty(iso)} &nbsp;·&nbsp; ${sc.todayCount}/${sc.required}</span></div>
     <div class="tasks" style="${accent(p.id)}">${rows}</div>
-    <div style="${accent(p.id)}">${photoRow}${banner}</div>
+    <div style="${accent(p.id)}">${photoRow}${banner}${soon}</div>
     <input type="file" id="shooter" accept="image/*" hidden>
     ${S.authErr ? `<div class="banner warn">${esc(S.authErr)}</div>` : ""}`;
 }
@@ -600,7 +614,7 @@ function rigHTML(p) {
   const sc = score(p.id);
   const st = statusOf(sc);
   const r = dayRec(p.id, sc.today);
-  const dots = [...KEYS, "photo"].map((k) =>
+  const dots = [...keysOn(p, sc.today), "photo"].map((k) =>
     `<span class="${(k === "water" ? waterDone(r) : !!r[k]) ? "on" : ""}"></span>`).join("");
   return `<div class="rig" data-pid="${p.id}" style="${accent(p.id)}">
     <div class="rig-head"><span class="rig-name">${esc(p.name)}</span>
@@ -632,7 +646,7 @@ function viewUs(me) {
   const sc = score(them.id);
   const r = dayRec(them.id, sc.today);
   const thumb = thumbOf(them.id, sc.today);
-  const items = TASKS.map((t) => {
+  const items = tasksOn(them, sc.today).map((t) => {
     if (t.k === "water") {
       const o = waterOunces(r);
       return `<li class="${waterDone(r) ? "on" : ""}"><span class="m">${CHECK}</span>${t.label}
@@ -647,7 +661,7 @@ function viewUs(me) {
 
   return duel + '<div class="gap"></div>' +
     `<div class="hd" style="${accent(them.id)}"><h2>${esc(them.name)} right now</h2>
-      <span class="rt">${pretty(sc.today)} in ${esc(placeOf(them))} &nbsp;·&nbsp; ${sc.todayCount}/6</span></div>
+      <span class="rt">${pretty(sc.today)} in ${esc(placeOf(them))} &nbsp;·&nbsp; ${sc.todayCount}/${sc.required}</span></div>
      <div class="mirror" style="${accent(them.id)}">${shot}<ul>${items}</ul></div>`;
 }
 
@@ -673,7 +687,7 @@ function monthsHTML(p, sc) {
       if (iso < p.start || iso > last) cls += " off";
       else if (iso === sc.today) {
         cls += " today" + (isComplete(p.id, iso) ? " done" : "");
-        label += ` — today, ${doneCount(p.id, iso)} of 6`;
+        label += ` — today, ${doneCount(p.id, iso)} of ${requiredOn(p, iso)}`;
       } else if (iso > sc.today) { cls += " future"; label += " — still ahead"; }
       else if (isComplete(p.id, iso)) { cls += " done"; label += " — clean, +1"; }
       else { cls += " miss"; label += ` — missed, −${PENALTY}`; }
@@ -735,6 +749,11 @@ function tzOptions(sel) {
   return list.map((z) => `<option value="${esc(z)}"${z === sel ? " selected" : ""}>${esc(z.replace(/_/g, " "))}</option>`).join("");
 }
 
+/* One line per extra wicket, so the rule box says who owes what from when. */
+const extrasNote = () => everyone().flatMap((p) => (p.extras || []).map((x) =>
+  ` ${esc(p.name)} also owes <b>${esc(x.label || x.k)}</b> from ${esc(longDate(x.from))} on;
+    days before that still score on the original six.`)).join("");
+
 function viewSetup() {
   const cards = everyone().map((p) => {
     const mine = p.id === S.me;
@@ -760,11 +779,11 @@ function viewSetup() {
         <div class="fld"><label for="motto">Motto</label>
           <input id="motto" data-set="motto" value="${esc(S.data.meta?.motto || MOTTO)}" maxlength="60"></div>
         <div class="fld"><label>The rule</label><div class="rulebox">
-          All six done before your own midnight: <b>+1</b>. Anything missing:
+          Every box done before your own midnight: <b>+1</b>. Anything missing:
           <span class="neg">−${PENALTY}</span>, floor of zero. Past days lock at midnight, so the
           ledger cannot be back-filled. A miss costs the day plus ${PENALTY} off the score, so it
           shoves your finish line up to ${PENALTY + 1} days later. Less if your score is already
-          near zero, since it cannot go under.
+          near zero, since it cannot go under.${extrasNote()}
         </div></div>
         <div class="fld"><label>Put it on your home screen</label><div class="rulebox">
           iPhone: open this page in Safari, tap Share, then <b>Add to Home Screen</b>.
@@ -884,7 +903,7 @@ function paintClocks() {
 
     if (sc.finished) { tEl.textContent = "DONE"; sEl.textContent = "all 75 banked"; continue; }
     tEl.textContent = `${pad(t.h)}:${pad(t.m)}:${pad(t.s)}`;
-    sEl.textContent = sc.todayDone ? "all six done, banked" : plural(sc.left, "box left", "boxes left");
+    sEl.textContent = sc.todayDone ? `all ${WORDS[sc.required] || sc.required} done, banked` : plural(sc.left, "box left", "boxes left");
   }
   paintLink();
 }

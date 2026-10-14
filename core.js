@@ -79,23 +79,33 @@ export function waterOunces(rec) {
 }
 export const waterDone = (rec) => waterOunces(rec) >= WATER_TOTAL;
 
-export function doneCount(days, iso) {
+/* Wickets one person took on partway through. Each sits on that person in
+ * config.js as { k, label, from } and counts only from `from` forward, in
+ * that person's own calendar. Every day before it keeps scoring against the
+ * original six, so adding one can never turn a banked day into a miss. */
+export function keysOn(person, iso) {
+  const extra = (person?.extras || []).filter((x) => x?.k && x.from && iso >= x.from).map((x) => x.k);
+  return extra.length ? [...TASK_KEYS, ...extra] : TASK_KEYS;
+}
+export const requiredOn = (person, iso) => keysOn(person, iso).length + 1;
+
+export function doneCount(days, iso, keys = TASK_KEYS) {
   const r = days?.[iso];
   if (!r) return 0;
   let n = 0;
-  for (const k of TASK_KEYS) {
+  for (const k of keys) {
     if (k === "water") { if (waterDone(r)) n++; }
     else if (r[k]) n++;
   }
   if (r.photo) n++;
   return n;
 }
-export const isComplete = (days, iso) => doneCount(days, iso) === REQUIRED;
+export const isComplete = (days, iso, keys = TASK_KEYS) => doneCount(days, iso, keys) === keys.length + 1;
 
 /* ---------- scoring ---------- */
 
-/* `person` needs { start, tz }. `days` is that person's map of
- * "YYYY-MM-DD" -> { w1, w2, water, read, diet, photo }. */
+/* `person` needs { start, tz } and may carry `extras`. `days` is that
+ * person's map of "YYYY-MM-DD" -> { w1, w2, water, read, diet, photo, ... }. */
 export function scoreFor(person, days, opts = {}) {
   const GOAL = opts.goal ?? GOAL_DEFAULT;
   const PENALTY = opts.penalty ?? PENALTY_DEFAULT;
@@ -107,13 +117,14 @@ export function scoreFor(person, days, opts = {}) {
   let count = 0, streak = 0, misses = 0, elapsed = 0, guard = 0;
   while (cur < today && guard++ < 4000) {
     elapsed++;
-    if (isComplete(days, cur)) { count = Math.min(GOAL, count + 1); streak++; }
+    if (isComplete(days, cur, keysOn(person, cur))) { count = Math.min(GOAL, count + 1); streak++; }
     else { count = Math.max(0, count - PENALTY); streak = 0; misses++; }
     cur = addDays(cur, 1);
   }
   elapsed++;                                       // today itself
 
-  const todayDone = isComplete(days, today);
+  const todayKeys = keysOn(person, today);
+  const todayDone = isComplete(days, today, todayKeys);
   if (todayDone) { count = Math.min(GOAL, count + 1); streak++; }
 
   const finished = count >= GOAL;
@@ -128,11 +139,12 @@ export function scoreFor(person, days, opts = {}) {
   const afterMiss = Math.max(0, count - PENALTY);
   const finishIfMissed = addDays(addDays(today, 1), GOAL - afterMiss - 1);
 
-  const todayCount = doneCount(days, today);
+  const todayCount = doneCount(days, today, todayKeys);
+  const required = todayKeys.length + 1;
   return {
     count, streak, misses, elapsed, today, todayDone, finished, perfect, finish, finishIfMissed,
-    todayCount,
-    left: REQUIRED - todayCount,
+    todayCount, required,
+    left: required - todayCount,
     pushed: Math.max(0, diffDays(perfect, finish)),
     costOfMissing: diffDays(finish, finishIfMissed)
   };

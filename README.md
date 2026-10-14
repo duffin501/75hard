@@ -16,9 +16,18 @@ Every day, before your own local midnight:
 - Your diet rule (each person sets their own)
 - A progress photo
 
+### Extra wickets
+
+One person can owe more than the six. An extra lives on that person in
+`config.js` as `{ k, label, from }` and counts only from `from` forward, in
+their own calendar. Days before it keep scoring on the original six, so adding
+one never turns a banked day into a miss.
+
+- Jon: **Intentional media use**, from 14 Oct 2026
+
 ## The scoring
 
-All six done: **+1**. Anything missing: **−10**, floored at zero.
+Every box done: **+1**. Anything missing: **−10**, floored at zero.
 
 Past days lock at midnight, so the ledger cannot be back-filled. That is the
 point of it.
@@ -33,7 +42,7 @@ get their own midnight and their own countdown.
 
 ## What it looks like
 
-Four tabs. **Today** is your six boxes and the photo. **Us** is the head to
+Four tabs. **Today** is your boxes and the photo. **Us** is the head to
 head scoreboard. **Ledger** is every dated day laid out as calendar months,
 with the moving finish line marked. **Setup** is names, diet rules, start
 dates and timezones.

@@ -5,8 +5,10 @@
 
 import {
   scoreFor, isoIn, addDays, diffDays,
-  waterOunces, waterDone, doneCount, isComplete, WATER_TOTAL, WATER_STEPS, WATER_MAX
+  waterOunces, waterDone, doneCount, isComplete, WATER_TOTAL, WATER_STEPS, WATER_MAX,
+  keysOn, requiredOn
 } from "../core.js";
+import { PEOPLE } from "../config.js";
 
 let pass = 0, fail = 0;
 const eq = (got, want, what) => {
@@ -228,6 +230,46 @@ group("The add buttons can land on a gallon, and overshooting is fine");
   const over = { d: { w1: 1, w2: 1, waterOz: 144, read: 1, diet: 1, photo: true } };
   eq(isComplete(over, "d"), true, "and completes the day");
   eq(waterOunces({ waterOz: 144 }), 144, "without quietly rounding down to 128");
+}
+
+/* ------------------------------------------------------------------ */
+group("An extra wicket counts from its own date forward, never backward");
+{
+  // Jon exactly as config.js has him, with fifty clean days behind him.
+  const JON = PEOPLE.find((p) => p.id === "jon");
+  const FROM = "2026-10-14";
+  eq(JON.extras?.[0]?.k, "media", "Jon carries the media wicket");
+  eq(JON.extras?.[0]?.from, FROM, "starting 14 Oct");
+
+  eq(requiredOn(JON, "2026-10-13"), 6, "the day before it, six boxes");
+  eq(requiredOn(JON, FROM), 7, "from its first day, seven");
+  eq(keysOn(JON, FROM).at(-1), "media", "and the seventh is media");
+  eq(requiredOn(PEOPLE.find((p) => p.id === "mary"), FROM), 6, "Mary is untouched");
+
+  // The whole point: nothing already banked turns into a miss.
+  const banked = run(JON.start, "2026-10-12");
+  const now = scoreFor(JON, banked, { today: "2026-10-13" });
+  eq(now.count, 50, "fifty clean days still score fifty");
+  eq(now.misses, 0, "with no misses invented");
+  eq(now.required, 6, "and today still asks for six");
+
+  // From the 14th, a day without media is a miss and a day with it is clean.
+  const sixOnly = { ...banked, "2026-10-13": { ...FULL }, [FROM]: { ...FULL } };
+  const withMedia = { ...sixOnly, [FROM]: { ...FULL, media: true } };
+  eq(isComplete(sixOnly, FROM, keysOn(JON, FROM)), false, "six of seven on the 14th is not done");
+  eq(isComplete(withMedia, FROM, keysOn(JON, FROM)), true, "seven of seven is");
+  eq(doneCount(sixOnly, FROM, keysOn(JON, FROM)), 6, "it reads as 6 of 7");
+
+  const t = scoreFor(JON, withMedia, { today: FROM });
+  eq(t.required, 7, "today asks for seven");
+  eq(t.todayDone, true, "and is banked at seven");
+  eq(t.count, 52, "fifty, plus the 13th, plus the 14th");
+  eq(scoreFor(JON, sixOnly, { today: "2026-10-15" }).misses, 1,
+    "skipping media on the 14th is a miss once the 15th arrives");
+
+  // A media tick on a day before the wicket existed is ignored.
+  eq(doneCount({ d: { ...FULL, media: true } }, "d", keysOn(JON, "2026-10-13")), 6,
+    "a stray tick before the start date does not count");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
