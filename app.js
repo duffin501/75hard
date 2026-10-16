@@ -1,9 +1,13 @@
 /* 75 Hard, shared between two people in two timezones.
  *
  * Rules: every box done before your own local midnight is +1. Anything missing
- * is -10, floored at zero. Past days lock at midnight, so nothing can be
- * back-filled. Every miss shoves your projected finish date later, which is
- * the number that actually stings.
+ * is -10, floored at zero. Every miss shoves your projected finish date
+ * later, which is the number that actually stings.
+ *
+ * Past days lock at midnight, with one exception: yesterday stays open for
+ * the whole of today so a day that was really done cannot be lost to a
+ * checkbox nobody tapped. See `fixableDay` in core.js for the guard rails.
+ * Anything filled in that way is stamped `late` and the ledger says so.
  *
  * Each person can only ever write their own row. That is enforced in the
  * Firebase security rules, not just here.
@@ -19,6 +23,7 @@ import {
   pad, addDays, diffDays, utc, isoIn, untilMidnight,
   fmt, pretty, shortDate, longDate, zoneName,
   doneCount as countDone, isComplete as complete, scoreFor, keysOn, requiredOn,
+  fixableDay, missingKeys,
   waterOunces, waterDone, WATER_TOTAL, WATER_STEPS, WATER_MAX,
   TASK_KEYS, REQUIRED
 } from "./core.js";
@@ -55,6 +60,8 @@ function tasksOn(p, iso) {
 }
 /* An extra that starts tomorrow, so the Today view can give a day's warning. */
 const startingTomorrow = (p, iso) => (p.extras || []).filter((x) => x?.from === addDays(iso, 1));
+
+const LABELS = { ...Object.fromEntries(TASKS.map((t) => [t.k, t.label])), photo: "Progress photo" };
 
 // Roughly 110 KB of JPEG for the keeper, 16 KB for the row thumbnail. Both
 // numbers are the length of the data URL, which is what the database stores.
@@ -93,7 +100,9 @@ const S = {
   authErr: null,
   claimErr: null,
   lightbox: null,
-  upload: null            // {pct, label} while a photo is being saved
+  upload: null,           // {pct, label} while a photo is being saved
+  shootIso: null,         // the date the file picker is currently filling
+  lateFixed: null         // a day repaired this session, kept on screen to say so
 };
 try { const t = sessionStorage.getItem("h75.tab"); if (t) S.tab = t; } catch {}
 
@@ -284,35 +293,45 @@ function flashError(e) {
   setTimeout(() => { S.authErr = null; render(); }, 6000);
 }
 
-async function toggleTask(key) {
+const todayIso = () => isoIn(person(S.me).tz);
+
+/* A day touched after its own midnight keeps the mark. The stamp is never
+ * worth failing the real write for, so it is allowed to fail quietly. */
+async function stampLate(iso) {
+  if (iso === todayIso()) return;
+  S.lateFixed = iso;
+  try { await set(ref(db, `days/${S.me}/${iso}/late`), true); } catch { /* cosmetic */ }
+}
+
+async function toggleTask(key, iso = todayIso()) {
   if (S.phase !== "ready") return;
-  const iso = isoIn(person(S.me).tz);
   const rec = dayRec(S.me, iso);
   const node = ref(db, `days/${S.me}/${iso}/${key}`);
   try {
     if (key === "water") {
       // The row's own checkbox fills or empties the whole gallon at once.
-      await writeWater(waterDone(rec) ? 0 : WATER_TOTAL);
+      await writeWater(waterDone(rec) ? 0 : WATER_TOTAL, iso);
       return;
     }
     rec[key] ? await remove(node) : await set(node, true);
+    await stampLate(iso);
   } catch (e) { flashError(e); }
 }
 
 /* Every write lands on `waterOz` and clears the old key, so a day only ever
  * carries one format once it has been touched. */
-async function writeWater(oz) {
+async function writeWater(oz, iso = todayIso()) {
   if (S.phase !== "ready") return;
-  const iso = isoIn(person(S.me).tz);
   const rec = dayRec(S.me, iso);
   const next = Math.max(0, Math.min(WATER_MAX, Math.round(oz)));
   try {
     const node = ref(db, `days/${S.me}/${iso}/waterOz`);
     next <= 0 ? await remove(node) : await set(node, next);
     if (rec.water !== undefined) await remove(ref(db, `days/${S.me}/${iso}/water`));
+    await stampLate(iso);
   } catch (e) { flashError(e); }
 }
-const addWater = (oz) => writeWater(waterOunces(dayRec(S.me, isoIn(person(S.me).tz))) + oz);
+const addWater = (oz) => writeWater(waterOunces(dayRec(S.me, todayIso())) + oz);
 const resetWater = () => writeWater(0);
 
 async function saveField(field, value) {
@@ -356,9 +375,8 @@ function encode(src, maxPx, budget) {
   return out;
 }
 
-async function savePhoto(file) {
+async function savePhoto(file, iso = todayIso()) {
   if (!file) return;
-  const iso = isoIn(person(S.me).tz);
   S.upload = { pct: 0.08, label: "Reading" };
   render();
 
@@ -375,6 +393,7 @@ async function savePhoto(file) {
 
     PICS.set(`${S.me}|${iso}|full`, full);
     PICS.set(`${S.me}|${iso}|thumb`, thumb);
+    await stampLate(iso);
     S.upload = null;
     render();
   } catch (e) {
@@ -384,7 +403,7 @@ async function savePhoto(file) {
 }
 
 async function removePhoto() {
-  const iso = isoIn(person(S.me).tz);
+  const iso = todayIso();
   try {
     await remove(ref(db, `days/${S.me}/${iso}/photo`));
     await remove(ref(db, `pics/${S.me}/${iso}`));
@@ -523,6 +542,68 @@ function navHTML(me) {
   }).join("") + `</nav>`;
 }
 
+/* ---------- yesterday, when it did not close clean ---------- */
+
+/* What finishing yesterday would actually buy, in the only two numbers that
+ * matter: the count, and how far the finish line moves back toward honest. */
+function fixGain(p, sc, iso) {
+  const days = { ...daysOf(p.id) };
+  const all = Object.fromEntries(keysOn(p, iso).filter((k) => k !== "water").map((k) => [k, true]));
+  days[iso] = { ...(days[iso] || {}), ...all, waterOz: WATER_TOTAL, photo: true };
+  const after = scoreFor(person(p.id), days, { goal: GOAL, penalty: PENALTY, today: sc.today });
+  return { count: after.count - sc.count, finish: after.finish };
+}
+
+function yesterdayHTML(p, sc) {
+  if (sc.finished) return "";
+  const iso = fixableDay(p, daysOf(p.id), { today: sc.today });
+
+  // Fixed a moment ago: say so rather than vanishing out from under her.
+  if (!iso) {
+    const y = addDays(sc.today, -1);
+    if (S.lateFixed !== y || !isComplete(p.id, y)) return "";
+    return `<div class="fixstrip done" style="${accent(p.id)}">
+      <div class="fixhd"><b>Yesterday is in.</b>
+        <span class="rt">${pretty(y)} &nbsp;·&nbsp; ${requiredOn(p, y)}/${requiredOn(p, y)}</span></div>
+      <p>That day counts. Finish line back to <b>${longDate(sc.finish)}</b>.</p></div>`;
+  }
+
+  const missing = missingKeys(daysOf(p.id), iso, keysOn(p, iso));
+  const label = (k) => LABELS[k] || tasksOn(p, iso).find((t) => t.k === k)?.label || k;
+  const gain = fixGain(p, sc, iso);
+  const oz = waterOunces(dayRec(p.id, iso));
+  const busy = !!S.upload;
+
+  const rows = missing.map((k) => {
+    if (k === "water") {
+      return `<button class="fixrow" data-fix-water="${iso}">
+        <span class="box">${CHECK}</span>
+        <span class="lbl"><b>${LABELS.water}</b><small>${WATER_TOTAL - oz} oz short of the gallon</small></span>
+        <span class="tag">+${WATER_TOTAL - oz} oz</span></button>`;
+    }
+    if (k === "photo") {
+      return `<button class="fixrow" data-fix-photo="${iso}" ${busy ? "disabled" : ""}>
+        <span class="box">${CHECK}</span>
+        <span class="lbl"><b>${LABELS.photo}</b><small>Pick yesterday's picture from your camera roll</small></span>
+        <span class="tag">${busy ? esc(S.upload.label) + "…" : "Add"}</span></button>`;
+    }
+    return `<button class="fixrow" data-fix="${k}" data-fix-iso="${iso}">
+      <span class="box">${CHECK}</span>
+      <span class="lbl"><b>${esc(label(k))}</b><small>Never ticked</small></span>
+      <span class="tag">Tick</span></button>`;
+  }).join("");
+
+  return `<div class="fixstrip" style="${accent(p.id)}">
+    <div class="fixhd"><b>Yesterday did not close clean.</b>
+      <span class="rt">${pretty(iso)} &nbsp;·&nbsp; ${doneCount(p.id, iso)}/${requiredOn(p, iso)}</span></div>
+    <p>${plural(missing.length, "box", "boxes")} short. If you did them, fill them in:
+      worth <b>${plural(gain.count, "day", "days")}</b> on the count and pulls your finish line
+      in to <b>${longDate(gain.finish)}</b>.</p>
+    <div class="fixrows">${rows}</div>
+    <p class="fine">Closes for good at midnight tonight, and the day is marked as a late fix.
+      Only yesterday can be touched.</p></div>`;
+}
+
 /* ---------- today ---------- */
 function viewToday(p) {
   const sc = score(p.id);
@@ -572,7 +653,8 @@ function viewToday(p) {
     `<div class="banner"><b>Starting tomorrow:</b> ${esc(x.label || x.k)} becomes box
       ${WORDS[sc.required + 1] || sc.required + 1}. Today still counts on ${WORDS[sc.required] || sc.required}.</div>`).join("");
 
-  return `<div class="hd" style="${accent(p.id)}"><h2>Today</h2>
+  return yesterdayHTML(p, sc) +
+    `<div class="hd" style="${accent(p.id)}"><h2>Today</h2>
       <span class="rt">${pretty(iso)} &nbsp;·&nbsp; ${sc.todayCount}/${sc.required}</span></div>
     <div class="tasks" style="${accent(p.id)}">${rows}</div>
     <div style="${accent(p.id)}">${photoRow}${banner}${soon}</div>
@@ -689,7 +771,11 @@ function monthsHTML(p, sc) {
         cls += " today" + (isComplete(p.id, iso) ? " done" : "");
         label += ` — today, ${doneCount(p.id, iso)} of ${requiredOn(p, iso)}`;
       } else if (iso > sc.today) { cls += " future"; label += " — still ahead"; }
-      else if (isComplete(p.id, iso)) { cls += " done"; label += " — clean, +1"; }
+      else if (isComplete(p.id, iso)) {
+        cls += " done";
+        label += dayRec(p.id, iso).late ? " — +1, filled in late" : " — clean, +1";
+        if (dayRec(p.id, iso).late) cls += " late";
+      }
       else { cls += " miss"; label += ` — missed, −${PENALTY}`; }
 
       if (iso === last && !sc.finished) { cls += " fin"; label += " — projected finish"; }
@@ -831,6 +917,18 @@ function wire() {
   });
   on("[data-water-reset]", "click", resetWater);
 
+  on("[data-fix]", "click", (e) => {
+    const b = e.currentTarget;
+    b.classList.add("stamp");
+    toggleTask(b.getAttribute("data-fix"), b.getAttribute("data-fix-iso"));
+  });
+  on("[data-fix-water]", "click", (e) =>
+    writeWater(WATER_TOTAL, e.currentTarget.getAttribute("data-fix-water")));
+  on("[data-fix-photo]", "click", (e) => {
+    S.shootIso = e.currentTarget.getAttribute("data-fix-photo");
+    document.getElementById("shooter")?.click();
+  });
+
   on("[data-task]", "click", (e) => {
     const btn = e.currentTarget;
     btn.classList.add("stamp");
@@ -839,11 +937,13 @@ function wire() {
   });
 
   const shooter = document.getElementById("shooter");
-  on("[data-shoot]", "click", () => shooter?.click());
+  on("[data-shoot]", "click", () => { S.shootIso = null; shooter?.click(); });
   shooter?.addEventListener("change", () => {
     const f = shooter.files?.[0];
+    const iso = S.shootIso || todayIso();
     shooter.value = "";
-    savePhoto(f);
+    S.shootIso = null;
+    savePhoto(f, iso);
   });
   on("[data-unshoot]", "click", removePhoto);
 

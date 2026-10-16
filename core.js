@@ -89,6 +89,39 @@ export function keysOn(person, iso) {
 }
 export const requiredOn = (person, iso) => keysOn(person, iso).length + 1;
 
+/* ---------- the one crack in the lock ---------- */
+
+/* Past days lock at midnight, with a single exception: the day that just
+ * ended stays open for the whole of the day after it. A day that was really
+ * six-for-six should not be lost to a checkbox nobody tapped at 23:58, and
+ * the penalty for one is eleven days of finish line.
+ *
+ * It is a correction, not a second chance, so three things hold it in place:
+ * only yesterday is ever offered, it closes for good at tonight's midnight,
+ * and anything filled in this way is stamped `late: true` so the ledger can
+ * say what happened. A day with nothing at all on it is not offered either,
+ * because an untouched day is indistinguishable from a day off. */
+
+export function missingKeys(days, iso, keys = TASK_KEYS) {
+  const r = days?.[iso] || {};
+  const out = [];
+  for (const k of keys) {
+    if (k === "water" ? !waterDone(r) : !r[k]) out.push(k);
+  }
+  if (!r.photo) out.push("photo");
+  return out;
+}
+
+export function fixableDay(person, days, opts = {}) {
+  const today = opts.today ?? isoIn(person.tz, opts.now);
+  const iso = addDays(today, -1);
+  if (diffDays(person.start, iso) < 0) return null;        // before the challenge began
+  const missing = missingKeys(days, iso, keysOn(person, iso));
+  if (missing.length === 0) return null;                   // nothing to fix
+  if (missing.length === requiredOn(person, iso)) return null;   // never logged; not a correction
+  return iso;
+}
+
 export function doneCount(days, iso, keys = TASK_KEYS) {
   const r = days?.[iso];
   if (!r) return 0;

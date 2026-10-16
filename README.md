@@ -29,8 +29,21 @@ one never turns a banked day into a miss.
 
 Every box done: **+1**. Anything missing: **−10**, floored at zero.
 
-Past days lock at midnight, so the ledger cannot be back-filled. That is the
-point of it.
+Past days lock at midnight, with exactly one exception: **yesterday stays open
+for the whole of today.** A day that was really six-for-six should not be lost
+to a checkbox nobody tapped at 23:58, and the penalty for that is eleven days
+of finish line.
+
+It is a correction, not a second chance, and three things hold it there:
+
+- Only yesterday is ever offered. The day before it is shut for good.
+- It closes at tonight's midnight, the same as everything else.
+- A day filled in this way is stamped `late`, and the ledger marks it with a
+  notch and reads "+1, filled in late" rather than "clean, +1".
+
+A day with nothing at all logged on it is never offered either. An untouched
+day is indistinguishable from a day off, and back-filling one from scratch is
+the thing the lock exists to prevent.
 
 Because the score is capped below at zero, a miss costs the day plus up to 10,
 so it shoves your projected finish date **up to 11 days later**. Less if your

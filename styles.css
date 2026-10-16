@@ -237,6 +237,39 @@ img{max-width:100%; display:block}
 .banner.good{background:var(--accent-soft); border-color:transparent; color:var(--accent)}
 .banner.good b{color:var(--accent)}
 
+/* ---- yesterday, when it did not close clean ---- */
+.fixstrip{border:1px solid var(--miss); background:var(--miss-soft); border-radius:3px;
+  padding:13px 15px 15px; margin-bottom:18px; display:grid; gap:10px}
+.fixstrip.done{border-color:transparent; background:var(--accent-soft)}
+.fixhd{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.fixhd b{font-size:14.5px; letter-spacing:-.012em; color:var(--miss)}
+.fixstrip.done .fixhd b{color:var(--accent)}
+.fixhd .rt{font-family:"DM Mono",monospace; font-size:11px; letter-spacing:.04em;
+  color:var(--miss); font-variant-numeric:tabular-nums}
+.fixstrip.done .fixhd .rt{color:var(--accent)}
+.fixstrip p{margin:0; font-size:13px; line-height:1.45; color:var(--ink-2)}
+.fixstrip p b{color:var(--ink)}
+.fixstrip .fine{font-size:11.5px; color:var(--ink-3); line-height:1.35}
+.fixrows{display:grid; gap:1px; background:var(--rule); border:1px solid var(--rule); border-radius:2px;
+  overflow:hidden}
+.fixrow{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:12px;
+  padding:11px 13px; background:var(--surface); border:0; text-align:left; cursor:pointer;
+  font:inherit; color:inherit}
+.fixrow:hover:not(:disabled){background:var(--surface-2)}
+.fixrow:disabled{cursor:default; opacity:.55}
+.fixrow .box{width:20px; height:20px; border:1.5px solid var(--rule-2); border-radius:3px;
+  display:grid; place-items:center; background:var(--surface)}
+.fixrow .box svg{width:13px; height:13px; fill:none; stroke:var(--surface); stroke-width:3;
+  stroke-linecap:round; stroke-linejoin:round; opacity:0; transform:scale(.6)}
+.fixrow.stamp .box{background:var(--accent); border-color:var(--accent)}
+.fixrow.stamp .box svg{opacity:1; transform:scale(1); transition:.18s}
+.fixrow .lbl{display:grid; gap:2px; min-width:0}
+.fixrow .lbl b{font-size:14.5px; font-weight:600; letter-spacing:-.012em}
+.fixrow .lbl small{font-size:12px; color:var(--ink-3); line-height:1.3}
+.fixrow .tag{font-family:"DM Mono",monospace; font-size:9px; letter-spacing:.12em;
+  text-transform:uppercase; padding:3px 6px; border-radius:2px; border:1px solid var(--rule-2);
+  color:var(--ink-3); white-space:nowrap}
+
 /* upload progress on the photo row */
 .prog{height:3px; background:var(--sunk); overflow:hidden; border:1px solid var(--rule); border-top:none}
 .prog i{display:block; height:100%; background:var(--accent); width:0; transition:width .2s linear}
@@ -323,6 +356,10 @@ img{max-width:100%; display:block}
 .day.today{border:2px solid var(--accent); color:var(--accent); font-weight:500}
 .day.today.done{color:var(--surface)}
 .day.fin{box-shadow:0 0 0 2px var(--ink) inset; color:var(--ink); font-weight:500}
+/* A day that counts, but was filled in the morning after. Still the accent
+   colour because it still counts; the notch says how it got there. */
+.day.late::after{content:""; position:absolute; left:2px; top:2px; width:0; height:0;
+  border-top:5px solid var(--surface); border-right:5px solid transparent; opacity:.85}
 .day.haspic{cursor:zoom-in}
 .day.haspic::before{content:""; position:absolute; right:2px; bottom:2px; width:4px; height:4px;
   border-radius:50%; background:currentColor; opacity:.85}

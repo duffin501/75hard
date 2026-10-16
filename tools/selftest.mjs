@@ -6,7 +6,8 @@
 import {
   scoreFor, isoIn, addDays, diffDays,
   waterOunces, waterDone, doneCount, isComplete, WATER_TOTAL, WATER_STEPS, WATER_MAX,
-  keysOn, requiredOn
+  keysOn, requiredOn,
+  fixableDay, missingKeys, REQUIRED
 } from "../core.js";
 import { PEOPLE } from "../config.js";
 
@@ -270,6 +271,58 @@ group("An extra wicket counts from its own date forward, never backward");
   // A media tick on a day before the wicket existed is ignored.
   eq(doneCount({ d: { ...FULL, media: true } }, "d", keysOn(JON, "2026-10-13")), 6,
     "a stray tick before the start date does not count");
+
+  // Yesterday's fix strip asks for the seventh box too, once it exists.
+  const y14 = { [FROM]: { ...FULL } };
+  eq(missingKeys(y14, FROM, keysOn(JON, FROM)).join(","), "media", "a six-box 14th is short only media");
+  eq(fixableDay(JON, y14, { today: "2026-10-15" }), FROM, "so it is offered on the 15th");
+}
+
+/* ------------------------------------------------------------------ */
+group("Yesterday stays open for one day, and only for a day that was underway");
+{
+  const TODAY = "2026-09-13";
+  const Y = "2026-09-12";
+  const P = { start: "2026-08-24", tz: "America/New_York" };
+
+  // The real case this was built for: everything done, two boxes untapped.
+  const near = { [Y]: { w1: 1, w2: 1, diet: 1, photo: true, waterOz: 120 } };
+  eq(missingKeys(near, Y).join(","), "water,read", "a short gallon and the reading are what is missing");
+  eq(doneCount(near, Y), 4, "which leaves the day at 4 of 6");
+  eq(fixableDay(P, near, { today: TODAY }), Y, "so yesterday is offered");
+
+  // A day that closed clean has nothing to offer.
+  const clean = { [Y]: { w1: 1, w2: 1, read: 1, diet: 1, photo: true, waterOz: WATER_TOTAL } };
+  eq(fixableDay(P, clean, { today: TODAY }), null, "a clean yesterday is not offered");
+
+  // An untouched day is a day off, not a correction.
+  eq(fixableDay(P, {}, { today: TODAY }), null, "a day with nothing logged is not offered");
+  eq(missingKeys({}, Y).length, REQUIRED, "and it reads as all six missing");
+  const oneBox = { [Y]: { w1: 1 } };
+  eq(fixableDay(P, oneBox, { today: TODAY }), Y, "one tap is enough to call it underway");
+
+  // Nothing older than yesterday is ever reachable.
+  const older = { "2026-09-11": { w1: 1, w2: 1, diet: 1, photo: true } };
+  eq(fixableDay(P, older, { today: TODAY }), null, "the day before yesterday is shut");
+
+  // Day one has no yesterday inside the challenge.
+  eq(fixableDay(P, { "2026-08-23": { w1: 1 } }, { today: "2026-08-24" }), null,
+    "the day before the start date is not offered");
+
+  // Filling it in is worth eleven days: the -10 becomes a +1. Scored against
+  // a real run, nineteen clean days behind it, which is the case that hit.
+  const real = { ...run(P.start, "2026-09-11"), ...near };
+  const before = scoreFor(P, real, { today: TODAY });
+  eq(before.count, 9, "nineteen clean days minus the ten for one miss");
+  eq(before.misses, 1, "one miss on the board");
+  eq(before.finish, "2026-11-17", "finish line shoved out to Nov 17");
+
+  const after = scoreFor(P, { ...real, [Y]: { ...near[Y], read: 1, waterOz: WATER_TOTAL } }, { today: TODAY });
+  eq(after.count - before.count, 11, "fixing the day swings the count by eleven");
+  eq(after.count, 20, "twenty clean days");
+  eq(diffDays(after.finish, before.finish), 11, "and pulls the finish line in by eleven days");
+  eq(after.finish, "2026-11-06", "back to the original date");
+  eq(after.misses, 0, "with the miss gone");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
