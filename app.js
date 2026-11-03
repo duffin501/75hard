@@ -413,6 +413,72 @@ async function removePhoto() {
   } catch (e) { flashError(e); }
 }
 
+/* ===================== finish day ===================== */
+
+/* Finish-day extras live in the database under `finish`, as a module plus its
+ * own data, so they can change without a deploy. Mary writes them and the
+ * rules open them to both on the last day. They run once per person, the
+ * first time the app sees that person finished, and Today offers them again.
+ *
+ * They are fetched on the last day rather than at the moment, so they start
+ * the instant the last box goes in. A read the rules refuse is a quiet false,
+ * retried at most once a minute. */
+const FIN = { mod: null, data: null, tried: 0, playing: false, preview: false };
+try { FIN.preview = new URLSearchParams(location.search).has("finish"); } catch {}
+
+async function loadFinish(force = false) {
+  if (FIN.mod) return true;
+  if (!force && Date.now() - FIN.tried < 60_000) return false;
+  FIN.tried = Date.now();
+  try {
+    const v = (await get(ref(db, "finish"))).val();
+    if (!v?.code) return false;
+    const url = URL.createObjectURL(new Blob([v.code], { type: "text/javascript" }));
+    try { FIN.mod = await import(url); }
+    catch { FIN.mod = await import("data:text/javascript;charset=utf-8," + encodeURIComponent(v.code)); }
+    finally { URL.revokeObjectURL(url); }
+    FIN.data = v;
+    try { FIN.mod.prefetch?.(finishKit()); } catch {}
+    return true;
+  } catch { return false; }
+}
+
+const finishKit = () => ({
+  data: FIN.data, me: S.me, goal: GOAL,
+  people: everyone(),
+  scores: Object.fromEntries(everyone().map((p) => [p.id, score(p.id)])),
+  days: S.data.days,
+  photo: loadFull,
+  thumb: (id, iso) => PICS.get(`${id}|${iso}|thumb`) || null
+});
+
+async function playFinish(again = false) {
+  if (FIN.playing) return;
+  FIN.playing = true;
+  try {
+    if (!(await loadFinish(again))) return;
+    if (!again) set(ref(db, `people/${S.me}/finishSeen`), true).catch(() => {});
+    await FIN.mod.play(finishKit());
+  } catch (e) {
+    console.error(e);
+  } finally {
+    FIN.playing = false;
+  }
+  render();
+}
+
+function finishCheck() {
+  if (S.phase !== "ready" || FIN.playing || !S.me) return;
+  if (FIN.preview) {
+    if (!Object.keys(daysOf(S.me)).length) return;   // wait for the days to land
+    FIN.preview = false; playFinish(true); return;
+  }
+  const sc = score(S.me);
+  if (!sc.finished && sc.count < GOAL - 1) return;   // not the last day yet
+  if (!FIN.mod) { loadFinish().then((ok) => ok && finishCheck()); return; }
+  if (sc.finished && !person(S.me).finishSeen) playFinish();
+}
+
 /* ===================== render ===================== */
 
 const root = () => document.getElementById("root");
@@ -445,6 +511,7 @@ function render() {
     }
   }
   paintClocks();
+  finishCheck();
 }
 
 const errHTML = () => S.authErr ? `<p class="err">${esc(S.authErr)}</p>` : "";
@@ -642,7 +709,8 @@ function viewToday(p) {
     ${busy ? `<div class="prog" id="prog"><i style="width:${Math.round(S.upload.pct * 100)}%"></i></div>` : ""}`;
 
   const banner = sc.finished
-    ? '<div class="banner good"><b>Seventy-five.</b> You finished the whole thing.</div>'
+    ? `<div class="banner good"><b>Seventy-five.</b> You finished the whole thing on ${longDate(sc.finish)}.
+       ${p.finishSeen ? '<button class="btn sm replay" data-replay="1">Watch it again</button>' : ""}</div>`
     : sc.todayDone
       ? `<div class="banner good"><b>Today is banked.</b> Finish line holds at <b>${longDate(sc.finish)}</b>.</div>`
       : `<div class="banner warn"><b>${plural(sc.left, "box", "boxes")} left.</b>
@@ -799,7 +867,7 @@ function viewLedger() {
   const blocks = everyone().map((p) => {
     const sc = score(p.id);
     const head = sc.finished
-      ? `<div class="fin">Finished on <b>${longDate(sc.today)}</b></div>
+      ? `<div class="fin">Finished on <b>${longDate(sc.finish)}</b></div>
          <div class="sub">${plural(sc.misses, "day", "days")} missed along the way</div>`
       : `<div class="fin">Finish line <b>${longDate(sc.finish)}</b></div>
          <div class="sub${sc.pushed ? " pushed" : ""}">${sc.pushed
@@ -946,6 +1014,7 @@ function wire() {
     savePhoto(f, iso);
   });
   on("[data-unshoot]", "click", removePhoto);
+  on("[data-replay]", "click", () => playFinish(true));
 
   on("[data-zoom]", "click", async (e) => {
     const [id, iso] = e.currentTarget.getAttribute("data-zoom").split("|");

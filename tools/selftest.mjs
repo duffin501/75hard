@@ -113,6 +113,27 @@ group("Finishing");
   const days = run("2026-07-01", "2026-09-20");
   const sc = scoreFor(MARY, days, { today: "2026-09-20" });
   eq(sc.count, 75, "score stops at 75");
+  eq(sc.finish, "2026-09-13", "and the finish date is the day it got there, not today");
+}
+{
+  // Nobody logs anything after the finish. Those empty days are not misses.
+  const days = run("2026-07-01", "2026-09-13");
+  const sc = scoreFor(MARY, days, { today: "2026-09-16" });
+  eq(sc.finished, true, "still finished three empty days later");
+  eq(sc.count, 75, "still 75");
+  eq(sc.misses, 0, "no misses charged after the finish");
+  eq(sc.finish, "2026-09-13", "finished on the day it closed");
+  eq(sc.elapsed, 75, "seventy-five calendar days, not seventy-eight");
+}
+{
+  // The last box goes in today: finished now, and dated today.
+  const days = run("2026-07-01", "2026-09-13");
+  const before = scoreFor(MARY, { ...days, "2026-09-13": { ...PARTIAL } }, { today: "2026-09-13" });
+  eq(before.finished, false, "one box short on day 75 is not finished");
+  eq(before.count, 74, "seventy-four banked");
+  const after = scoreFor(MARY, days, { today: "2026-09-13" });
+  eq(after.finished, true, "the last box finishes it");
+  eq(after.finish, "2026-09-13", "on today's date");
 }
 
 /* ------------------------------------------------------------------ */

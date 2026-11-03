@@ -236,6 +236,7 @@ img{max-width:100%; display:block}
 .banner.warn b{color:var(--miss)}
 .banner.good{background:var(--accent-soft); border-color:transparent; color:var(--accent)}
 .banner.good b{color:var(--accent)}
+.banner .replay{display:block; margin-top:10px; border-color:var(--accent); color:var(--accent); background:transparent}
 
 /* ---- yesterday, when it did not close clean ---- */
 .fixstrip{border:1px solid var(--miss); background:var(--miss-soft); border-radius:3px;

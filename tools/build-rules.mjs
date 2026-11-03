@@ -85,6 +85,7 @@ if (!mary) {
   process.exit(1);
 }
 const maryGuard = owner(mary);
+const FINISH_OPENS = Date.UTC(2026, 10, 6, 7);   // 6 Nov 2026, 00:00 in Utah (MST)
 
 const IMG_MAX = 400_000;
 const str = (max) => ({ ".validate": `newData.isString() && newData.val().length <= ${max}` });
@@ -145,6 +146,10 @@ const database = {
     },
 
     days: { ".read": guard, ...perPerson((p) => ({ ".write": owner(p) })) },
+
+    // Finish-day content, written by Mary, readable by both from the start of
+    // the last day in Utah.
+    finish: { ".read": `(${maryGuard}) || (${guard} && now >= ${FINISH_OPENS})`, ".write": maryGuard },
 
     pics: {
       ".read": guard,

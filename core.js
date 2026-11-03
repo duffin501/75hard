@@ -147,27 +147,33 @@ export function scoreFor(person, days, opts = {}) {
   let cur = person.start;
   if (diffDays(cur, today) < 0) cur = today;      // start date sits in the future
 
-  let count = 0, streak = 0, misses = 0, elapsed = 0, guard = 0;
+  // Reaching the goal ends it. Scoring stops on the day the count hits 75, so
+  // an empty day after the finish is not a miss and cannot take it back.
+  let count = 0, streak = 0, misses = 0, elapsed = 0, guard = 0, doneOn = null;
   while (cur < today && guard++ < 4000) {
     elapsed++;
     if (isComplete(days, cur, keysOn(person, cur))) { count = Math.min(GOAL, count + 1); streak++; }
     else { count = Math.max(0, count - PENALTY); streak = 0; misses++; }
+    if (count >= GOAL) { doneOn = cur; break; }
     cur = addDays(cur, 1);
   }
-  elapsed++;                                       // today itself
 
   const todayKeys = keysOn(person, today);
   const todayDone = isComplete(days, today, todayKeys);
-  if (todayDone) { count = Math.min(GOAL, count + 1); streak++; }
+  if (!doneOn) {
+    elapsed++;                                     // today itself
+    if (todayDone) { count = Math.min(GOAL, count + 1); streak++; }
+    if (count >= GOAL) doneOn = today;
+  }
 
-  const finished = count >= GOAL;
+  const finished = doneOn !== null;
   const perfect = addDays(person.start, GOAL - 1);
 
   // The finish line is a live date. Every clean day pulls it in by one; every
   // miss shoves it back by the penalty plus the day you burned. The floor at
   // zero means an early miss costs less than a late one, which is honest.
   const finish = finished
-    ? today
+    ? doneOn
     : addDays(todayDone ? addDays(today, 1) : today, GOAL - count - 1);
   const afterMiss = Math.max(0, count - PENALTY);
   const finishIfMissed = addDays(addDays(today, 1), GOAL - afterMiss - 1);
